@@ -52,17 +52,29 @@ class SamlUserService {
    *   The uid of the matching user or NULL if we can't find one.
    */
   public function findUidByUniqueId($id) {
-    $return = $this->user_data->get('samlauth', NULL, 'saml_id', $id);
-    if (empty($return)) {
+    if (empty($id)) {
+      // We don't support an 'empty' unique ID value; we can't match it reliably
+      // and also do not want to end up creating new users every time.
+      throw new Exception('Unique ID is empty.');
+    }
+    $user_data = $this->user_data->get('samlauth', NULL, 'saml_id');
+    if ($user_data) {
+      // Non-strict matching because we don't want to assume that types from the
+      // data storage and received SAML properties are the same.
+      $user_data = array_keys($user_data, $id);
+    }
+
+    if (empty($user_data)) {
       $return = NULL;
     }
-    elseif (is_array($return)) {
-      if (count($return) === 1) {
-        $return = reset($return);
-      }
-      else {
-        throw new Exception('There are duplicates of the unique ID.');
-      }
+    elseif (!is_array($user_data)) {
+      throw new Exception('Mapping the unique ID returned an unexpected result.');
+    }
+    elseif (count($user_data) === 1) {
+      $return = key($user_data);
+    }
+    else {
+      throw new Exception('There are duplicates of the unique ID.');
     }
     return $return;
   }
@@ -86,7 +98,7 @@ class SamlUserService {
 
     if (!$uid) {
       $mail_attribute = $this->config->get('map_users_email');
-      if ($this->config->get('map_users') && $account = user_load_by_mail($saml_data[$mail_attribute])) {
+      if ($this->config->get('map_users') && !empty($saml_data[$mail_attribute]) && $account = user_load_by_mail($saml_data[$mail_attribute])) {
         $this->associateSamlIdWithAccount($unique_id, $account);
       }
       else if ($this->config->get('create_users')) {
@@ -98,6 +110,9 @@ class SamlUserService {
     }
     else {
       $account = User::load($uid);
+      if (!$account) {
+        throw new Exception('Could not load user by given unique ID.');
+      }
     }
 
     if ($account->isBlocked()) {
