@@ -5,4 +5,7 @@ services:
     arguments: [ "@service_container" ]
   samlauth.saml_user:
     class: Drupal\samlauth\SamlUserService
-    arguments: [ "@user.data", "@config.factory" ]
+    arguments: [ "@user.data", "@config.factory", "@logger.channel.samlauth" ]
+  logger.channel.samlauth:
+    parent: logger.channel_base
+    arguments: ['samlauth']

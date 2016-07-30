@@ -7,9 +7,11 @@
 
 namespace Drupal\samlauth;
 use \Exception;
+use Drupal\Core\Config\ConfigFactoryInterface;
 use Drupal\Core\Session\AccountInterface;
 use Drupal\user\Entity\User;
 use Drupal\user\UserDataInterface;
+use Psr\Log\LoggerInterface;
 
 /**
  * Class SamlUserService.
@@ -33,14 +35,26 @@ class SamlUserService {
   protected $config;
 
   /**
+   * Instance of LoggerInterface.
+   *
+   * @var \Psr\Log\LoggerInterface $logger
+   */
+  protected $logger;
+
+  /**
    * Constructor for SamlUserService.
    *
    * @param \Drupal\user\UserDataInterface $user_data
+   *   The user data service.
+   * @param \Drupal\Core\Config\ConfigFactoryInterface $config_factory
+   *   The config factory.
+   * @param \Psr\Log\LoggerInterface $logger
+   *   A logger instance.
    */
-  public function __construct(UserDataInterface $user_data) {
+  public function __construct(UserDataInterface $user_data, ConfigFactoryInterface $config_factory, LoggerInterface $logger) {
     $this->user_data = $user_data;
-    // @TODO: How should this be injected?
-    $this->config = \Drupal::config('samlauth.authentication');
+    $this->config = $config_factory->get('samlauth.authentication');
+    $this->logger = $logger;
   }
 
   /**
@@ -97,11 +111,14 @@ class SamlUserService {
     $uid = $this->findUidByUniqueId($unique_id);
 
     if (!$uid) {
+      $this->logger->debug('No matching local users found for unique SAML ID @saml_id.', array('@saml_id' => $unique_id));
       $mail_attribute = $this->config->get('map_users_email');
       if ($this->config->get('map_users') && !empty($saml_data[$mail_attribute]) && $account = user_load_by_mail($saml_data[$mail_attribute])) {
+        $this->logger->info('Matching local user @uid found for e-mail @mail; associating user and logging in.', array('@mail' => $saml_data[$mail_attribute], '@uid' => $uid));
         $this->associateSamlIdWithAccount($unique_id, $account);
       }
       else if ($this->config->get('create_users')) {
+        $this->logger->info('Creating new user from SAML data for ID @saml_id / e-mail @mail and logging in.', array('@saml_id' => $unique_id, '@mail' => $saml_data[$mail_attribute]));
         $account = $this->createUserFromSamlData($saml_data);
       }
       else {
@@ -109,6 +126,7 @@ class SamlUserService {
       }
     }
     else {
+      $this->logger->info('Matching local user @uid found for unique SAML ID @saml_id; logging in.', array('@saml_id' => $unique_id, '@uid' => $uid));
       $account = User::load($uid);
       if (!$account) {
         throw new Exception('Could not load user by given unique ID.');
