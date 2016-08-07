@@ -270,7 +270,7 @@ class SamlauthConfigureForm extends ConfigFormBase {
       ->set('user_name_attribute', $form_state->getValue('user_name_attribute'))
       ->set('user_mail_attribute', $form_state->getValue('user_mail_attribute'))
       ->set('security_authn_requests_sign', $form_state->getValue('security_authn_requests_sign'))
-      ->set('security_messages_sign', $form_state->getValue('security_messages_signe'))
+      ->set('security_messages_sign', $form_state->getValue('security_messages_sign'))
       ->set('security_name_id_sign', $form_state->getValue('security_name_id_sign'))
       ->set('security_request_authn_context', $form_state->getValue('security_request_authn_context'))
       ->save();

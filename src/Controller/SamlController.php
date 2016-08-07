@@ -130,7 +130,7 @@ class SamlController extends ControllerBase {
    * @return \Symfony\Component\HttpFoundation\RedirectResponse
    */
   public function changepw() {
-    $url = \Drupal::config('samlauth.samlauthconfigure_config')->get('idp_change_password_service');
+    $url = \Drupal::config('samlauth.authentication')->get('idp_change_password_service');
     return new RedirectResponse($url);
   }
 
