@@ -9,9 +9,8 @@ namespace Drupal\samlauth;
 
 use \Exception;
 use Drupal\Core\Config\ConfigFactoryInterface;
-use Drupal\Core\Session\AccountInterface;
-use Drupal\user\Entity\User;
-use Drupal\user\UserDataInterface;
+use Drupal\Core\Entity\EntityTypeManagerInterface;
+use Drupal\externalauth\ExternalAuth;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -22,11 +21,11 @@ use Psr\Log\LoggerInterface;
 class SamlUserService {
 
   /**
-   * Instance of UserDataInterface.
+   * The ExternalAuth service.
    *
-   * @var Drupal\user\UserDataInterface $user_data
+   * @var \Drupal\externalauth\ExternalAuth
    */
-  protected $user_data;
+  protected $external_auth;
 
   /**
    * A configuration object containing samlauth settings.
@@ -34,6 +33,13 @@ class SamlUserService {
    * @var \Drupal\Core\Config\ImmutableConfig
    */
   protected $config;
+
+  /**
+   * The EntityTypeManager service.
+   *
+   * @var \Drupal\Core\Entity\EntityTypeManagerInterface
+   */
+  protected $entityTypeManager;
 
   /**
    * A logger instance.
@@ -45,53 +51,20 @@ class SamlUserService {
   /**
    * Constructor for SamlUserService.
    *
-   * @param \Drupal\user\UserDataInterface $user_data
-   *   The user data service.
+   * @param \Drupal\externalauth\ExternalAuth $external_auth
+   *   The ExternalAuth service.
    * @param \Drupal\Core\Config\ConfigFactoryInterface $config_factory
    *   The config factory.
+   * @param \Drupal\Core\Entity\EntityTypeManagerInterface $entity_type_manager
+   *   The EntityTypeManager service.
    * @param \Psr\Log\LoggerInterface $logger
    *   A logger instance.
    */
-  public function __construct(UserDataInterface $user_data, ConfigFactoryInterface $config_factory, LoggerInterface $logger) {
-    $this->user_data = $user_data;
+  public function __construct(ExternalAuth $external_auth, ConfigFactoryInterface $config_factory, EntityTypeManagerInterface $entity_type_manager, LoggerInterface $logger) {
+    $this->external_auth = $external_auth;
     $this->config = $config_factory->get('samlauth.authentication');
+    $this->entityTypeManager = $entity_type_manager;
     $this->logger = $logger;
-  }
-
-  /**
-   * Find a user by a given SAML unique ID.
-   *
-   * @param string $id
-   *   The unique ID to search for.
-   * @return integer|null
-   *   The uid of the matching user or NULL if we can't find one.
-   */
-  public function findUidByUniqueId($id) {
-    if (empty($id)) {
-      // We don't support an 'empty' unique ID value; we can't match it reliably
-      // and also do not want to end up creating new users every time.
-      throw new Exception('Unique ID is empty.');
-    }
-    $user_data = $this->user_data->get('samlauth', NULL, 'saml_id');
-    if ($user_data) {
-      // Non-strict matching because we don't want to assume that types from the
-      // data storage and received SAML properties are the same.
-      $user_data = array_keys($user_data, $id);
-    }
-
-    if (empty($user_data)) {
-      $return = NULL;
-    }
-    elseif (!is_array($user_data)) {
-      throw new Exception('Mapping the unique ID returned an unexpected result.');
-    }
-    elseif (count($user_data) === 1) {
-      $return = key($user_data);
-    }
-    else {
-      throw new Exception('There are duplicates of the unique ID.');
-    }
-    return $return;
   }
 
   /**
@@ -104,41 +77,48 @@ class SamlUserService {
     $unique_id_attribute = $this->config->get('unique_id_attribute');
 
     // We depend on the unique ID being present, so make sure it's there.
-    if (!isset($saml_data[$unique_id_attribute][0])) {
-      throw new Exception('Configured unique ID is not present in SAML response!');
+    if (empty($saml_data[$unique_id_attribute][0])) {
+      if (isset($saml_data[$unique_id_attribute][0])) {
+        throw new Exception('Configured unique ID value in SAML response is empty.');
+      }
+      else {
+        throw new Exception('Configured unique ID is not present in SAML response.');
+      }
     }
 
     $unique_id = $saml_data[$unique_id_attribute][0];
-    $uid = $this->findUidByUniqueId($unique_id);
+    $account = $this->external_auth->load($unique_id, 'samlauth');
 
-    if (!$uid) {
+    if (!$account) {
       $this->logger->debug('No matching local users found for unique SAML ID @saml_id.', array('@saml_id' => $unique_id));
+
       $mail_attribute = $this->config->get('map_users_email');
-      if ($this->config->get('map_users') && !empty($saml_data[$mail_attribute]) && $account = user_load_by_mail($saml_data[$mail_attribute])) {
-        $this->logger->info('Matching local user @uid found for e-mail @mail; associating user and logging in.', array('@mail' => $saml_data[$mail_attribute], '@uid' => $uid));
-        $this->associateSamlIdWithAccount($unique_id, $account);
+      if ($this->config->get('map_users') && !empty($saml_data[$mail_attribute])
+          && $account_search = $this->entityTypeManager->getStorage('user')->loadByProperties(array('mail' => $saml_data[$mail_attribute]))) {
+        $account = reset($account_search);
+        $this->logger->info('Matching local user @uid found for e-mail @mail in SAML data; associating user and logging in.', array('@mail' => $saml_data[$mail_attribute], '@uid' => $account->id()));
+        // An existing 'samlauth' link for the account will be overwritten.
+        $this->external_auth->linkExistingAccount($unique_id, 'samlauth', $account);
+        $this->external_auth->userLoginFinalize($account, $unique_id, 'samlauth');
       }
-      else if ($this->config->get('create_users')) {
-        $this->logger->info('Creating new user from SAML data for ID @saml_id / e-mail @mail and logging in.', array('@saml_id' => $unique_id, '@mail' => $saml_data[$mail_attribute]));
-        $account = $this->createUserFromSamlData($saml_data);
+
+      // @todo: we should first try to link existing accounts by _user_ too;
+      //        externalauth will throw an exception if an account with the same
+      //        name exists and we are doing nothing to prevent that.
+      elseif ($this->config->get('create_users')) {
+        $account = $this->external_auth->register($unique_id, 'samlauth');
+        $this->external_auth->userLoginFinalize($account, $unique_id, 'samlauth');
       }
       else {
         throw new Exception('No existing user account matches the SAML ID provided. This authentication service is not configured to create new accounts.');
       }
     }
-    else {
-      $this->logger->info('Matching local user @uid found for unique SAML ID @saml_id; logging in.', array('@saml_id' => $unique_id, '@uid' => $uid));
-      $account = User::load($uid);
-      if (!$account) {
-        throw new Exception('Could not load user by given unique ID.');
-      }
-    }
-
-    if ($account->isBlocked()) {
+    elseif ($account->isBlocked()) {
       throw new Exception('Requested account is blocked.');
     }
-
-    user_login_finalize($account);
+    else {
+      $this->external_auth->userLoginFinalize($account, $unique_id, 'samlauth');
+    }
   }
 
   /**
@@ -161,50 +141,4 @@ class SamlUserService {
     return '<front>';
   }
 
-  /**
-   * Create a new user from SAML response data.
-   *
-   * @param array $saml_data
-   * @return static
-   * @throws \Exception
-   */
-  protected function createUserFromSamlData(array $saml_data) {
-    $user_unique_attribute = $this->config->get('unique_id_attribute');
-    $user_name_attribute = $this->config->get('user_name_attribute');
-    $user_mail_attribute = $this->config->get('user_mail_attribute');
-    if (!isset($saml_data[$user_name_attribute][0])) {
-      throw new Exception('Missing name attribute.');
-    }
-    if (!isset($saml_data[$user_mail_attribute][0])) {
-      throw new Exception('Missing mail attribute.');
-    }
-
-    $account = User::create();
-    $account->setUsername($saml_data[$user_name_attribute][0]);
-    $account->setPassword(user_password(50));
-    $account->setEmail($saml_data[$user_mail_attribute][0]);
-    $account->activate();
-
-    // Allow other users to change/set user properties before saving.
-    \Drupal::moduleHandler()->alter('samlauth_new_user', $account, $saml_data);
-
-    $account->save();
-
-    // Save the unique ID for later use.
-    $this->associateSamlIdWithAccount($saml_data[$user_unique_attribute][0], $account);
-
-    return $account;
-  }
-
-  /**
-   * Ensure that a SAML id is associated with a given user account.
-   *
-   * This function is idempotent.
-   *
-   * @param $saml_id
-   * @param \Drupal\Core\Session\AccountInterface $account
-   */
-  protected function associateSamlIdWithAccount($saml_id, AccountInterface $account) {
-    $this->user_data->set('samlauth', $account->id(), 'saml_id', $saml_id);
-  }
 }

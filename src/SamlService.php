@@ -9,10 +9,13 @@ namespace Drupal\samlauth;
 
 use Drupal\Core\Config\ConfigFactoryInterface;
 use Drupal\Core\Config\ImmutableConfig;
+use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\Core\Url;
+use Drupal\user\UserInterface;
+use InvalidArgumentException;
 use OneLogin_Saml2_Auth;
 use OneLogin_Saml2_Error;
-use InvalidArgumentException;
+use Psr\Log\LoggerInterface;
 
 /**
  * Class SamlService.
@@ -22,6 +25,13 @@ use InvalidArgumentException;
 class SamlService {
 
   /**
+   * A OneLogin_Saml2_Auth object representing the current request state.
+   *
+   * @var \OneLogin_Saml2_Auth
+   */
+  protected $auth;
+
+  /**
    * A configuration object containing samlauth settings.
    *
    * @var \Drupal\Core\Config\ImmutableConfig
@@ -29,18 +39,33 @@ class SamlService {
   protected $config;
 
   /**
-   * @var \OneLogin_Saml2_Auth
+   * The EntityTypeManager service.
+   *
+   * @var \Drupal\Core\Entity\EntityTypeManagerInterface
    */
-  protected $auth;
+  protected $entityTypeManager;
+
+  /**
+   * A logger instance.
+   *
+   * @var \Psr\Log\LoggerInterface
+   */
+  protected $logger;
 
   /**
    * Constructor for Drupal\samlauth\SamlService.
    *
    * @param \Drupal\Core\Config\ConfigFactoryInterface $config_factory
    *   The config factory.
+   * @param \Drupal\Core\Entity\EntityTypeManagerInterface $entity_type_manager
+   *   The EntityTypeManager service.
+   * @param \Psr\Log\LoggerInterface $logger
+   *   A logger instance.
    */
-  public function __construct(ConfigFactoryInterface $config_factory) {
+  public function __construct(ConfigFactoryInterface $config_factory, EntityTypeManagerInterface $entity_type_manager, LoggerInterface $logger) {
     $this->config = $config_factory->get('samlauth.authentication');
+    $this->entityTypeManager = $entity_type_manager;
+    $this->logger = $logger;
     $this->auth = new OneLogin_Saml2_Auth(static::reformatConfig($this->config));
   }
 
@@ -128,9 +153,90 @@ class SamlService {
     user_logout();
   }
 
+  /**
+   * Synchronizes user data with attributes in the SAML request.
+   *
+   * Currently does not actually sync attributes on login because no "sync"
+   * settings are implemented yet. (Note syncing-on-login is not the same as
+   * 'map users'.) This at least is a first step to implementing it though.
+   * Currently this is only called for adding user data from SAML attributes
+   * into new accounts before saving, and not all checks are actually necessary
+   * yet.
+   *
+   * Code borrowed from simplesamlphp_auth module with thanks & the intention to
+   * keep code bases similar where that makes sense.
+   *
+   * @param \Drupal\user\UserInterface $account
+   *   The Drupal user to synchronize attributes into.
+   */
+  public function synchronizeUserAttributes(UserInterface $account) {
+    $sync_mail = $account->isNew(); //  || $this->config->get('sync.mail');
+    $sync_user_name = $account->isNew(); // || $this->config->get('sync.user_name');
+
+    if ($sync_user_name) {
+      $name = $this->getAttributeByConfig('user_name_attribute');
+      if ($name) {
+        $existing = FALSE;
+        $account_search = $this->entityTypeManager->getStorage('user')->loadByProperties(array('name' => $name));
+        if ($existing_account = reset($account_search)) {
+          if ($account->id() != $existing_account->id()) {
+            $existing = TRUE;
+            $this->logger->critical("Error on synchronizing name attribute: an account with the username %username already exists.", ['%username' => $name]);
+            drupal_set_message(t('Error synchronizing username: an account with this username already exists.'), 'error');
+          }
+        }
+
+        if (!$existing) {
+          $account->setUsername($name);
+        }
+      }
+      else {
+        $this->logger->critical("Error on synchronizing name attribute: no username available for Drupal user %id.", ['%id' => $account->id()]);
+        drupal_set_message(t('Error synchronizing username: no username is provided by SAML.'), 'error');
+      }
+    }
+
+    if ($sync_mail) {
+      $mail = $this->getAttributeByConfig('user_mail_attribute');
+      if ($mail) {
+        $account->setEmail($mail);
+        if ($account->isNew()) {
+          // externalauth sets 'init' to a non e-mail value so we will fix it.
+          $account->set('init', $mail);
+        }
+      }
+      else {
+        $this->logger->critical("Error on synchronizing mail attribute: no email address available for Drupal user %id.", ['%id' => $account->id()]);
+        drupal_set_message(t('Error synchronizing mail: no email address is provided by SAML.'), 'error');
+      }
+    }
+  }
+
   // Helper function.
   public function getData() {
     return $this->auth->getAttributes();
+  }
+
+  /**
+   * Returns an attribute value in a SAML response. This method will return
+   * valid data after a response is processed (i.e. after acs() was called).
+   *
+   * @param string
+   *   A key in the module's configuration, containing the name of a SAML
+   *   attribute.
+   *
+   * @return mixed|null
+   *   The SAML attribute value; NULL if the attribute value, or configuration
+   *   key, was not found.
+   */
+  public function getAttributeByConfig($config_key) {
+    $attribute_name = $this->config->get($config_key);
+    if ($attribute_name) {
+      $attribute = $this->auth->getAttribute($attribute_name);
+      if (!empty($attribute[0])) {
+        return $attribute[0];
+      }
+    }
   }
 
   /**
