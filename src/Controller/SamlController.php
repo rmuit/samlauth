@@ -11,7 +11,6 @@ use Exception;
 use Drupal\samlauth\SamlService;
 use Drupal\samlauth\SamlUserService;
 use Drupal\Core\Controller\ControllerBase;
-use Drupal\Core\DependencyInjection\ContainerInjectionInterface;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Response;
@@ -24,19 +23,23 @@ use Symfony\Component\HttpFoundation\Response;
 class SamlController extends ControllerBase {
 
   /**
-   * @var Drupal\samlauth\SamlService
+   * The samlauth SAML service.
+   *
+   * @var \Drupal\samlauth\SamlService
    */
   protected $saml;
 
   /**
-   * @var Drupal\samlauth\SamlUserService
+   * @var \Drupal\samlauth\SamlUserService
    */
   protected $saml_user;
 
   /**
    * Constructor for Drupal\samlauth\Controller\SamlController.
    *
-   * @param \Drupal\samlauth\Controller\SamlService $samlauth_saml
+   * @param \Drupal\samlauth\SamlService $saml
+   *   The samlauth SAML service.
+   * @param \Drupal\samlauth\SamlUserService $saml_user
    */
   public function __construct(SamlService $saml, SamlUserService $saml_user) {
     $this->saml = $saml;
@@ -57,19 +60,21 @@ class SamlController extends ControllerBase {
   }
 
   /**
-   * Redirect to the Login service on the IDP.
+   * Initiates a SAML2 authentication flow.
+   *
+   * This should redirect to the Login service on the IDP and then to our ACS.
    */
   public function login() {
-    $config = samlauth_get_config();
-    $this->saml->login($config['sp']['assertionConsumerService']['url']);
+    $this->saml->login();
   }
 
   /**
-   * Redirect to the SLS service on the IDP.
+   * Initiate a SAML2 logout flow.
+   *
+   * This should redirect to the SLS service on the IDP and then to our SLS.
    */
   public function logout() {
-    $config = samlauth_get_config();
-    $this->saml->logout($config['sp']['singleLogoutService']['url']);
+    $this->saml->logout();
   }
 
   /**
@@ -85,7 +90,10 @@ class SamlController extends ControllerBase {
   }
 
   /**
-   * Attribute Consumer Service
+   * Attribute Consumer Service.
+   *
+   * This is usually the second step in the authentication flow; the Login
+   * service on the IDP should redirect (or: execute a POST request to) here.
    *
    * @return \Symfony\Component\HttpFoundation\RedirectResponse
    */
@@ -110,14 +118,20 @@ class SamlController extends ControllerBase {
   }
 
   /**
-   * Single Logout Service
+   * Single Logout Service.
    *
-   * Return URL for the sls service on the identity provider.
+   * This is usually the second step in the logout flow; the SLS service on the
+   * IDP should redirect here.
    *
    * @return \Symfony\Component\HttpFoundation\RedirectResponse
+   *
+   * @todo we already called user_logout() at the start of the logout
+   *   procedure i.e. at logout(). The route that leads here is only accessible
+   *   for authenticated user. So will this never be executed and should we
+   *   change this code?
    */
   public function sls() {
-    $this->saml_user->logout();
+    $this->saml->sls();
 
     $route = $this->saml_user->getPostLogoutDestination();
     $url = \Drupal::urlGenerator()->generateFromRoute($route);

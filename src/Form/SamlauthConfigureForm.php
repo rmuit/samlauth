@@ -9,6 +9,7 @@ namespace Drupal\samlauth\Form;
 
 use Drupal\Core\Form\ConfigFormBase;
 use Drupal\Core\Form\FormStateInterface;
+use Drupal\Core\Url;
 
 /**
  * Class SamlauthConfigureForm.
@@ -38,7 +39,6 @@ class SamlauthConfigureForm extends ConfigFormBase {
    */
   public function buildForm(array $form, FormStateInterface $form_state) {
     $config = $this->config('samlauth.authentication');
-    $config_array = samlauth_get_config();
 
     $form['saml_requirements'] = array(
       '#type' => 'fieldset',
@@ -61,8 +61,8 @@ class SamlauthConfigureForm extends ConfigFormBase {
       '#theme' => 'item_list',
       '#items' => array(
         $this->t('Metadata URL') . ': ' . \Drupal::urlGenerator()->generateFromRoute('samlauth.saml_controller_metadata', array(), array('absolute' => TRUE)),
-        $this->t('Assertion Consumer Service') . ': ' . $config_array['sp']['assertionConsumerService']['url'],
-        $this->t('Single Logout Service') . ': ' . $config_array['sp']['singleLogoutService']['url'],
+        $this->t('Assertion Consumer Service') . ': ' . Url::fromRoute('samlauth.saml_controller_acs', array(), array('absolute' => TRUE))->toString(),
+        $this->t('Single Logout Service') . ': ' . Url::fromRoute('samlauth.saml_controller_sls', array(), array('absolute' => TRUE))->toString(),
       ),
       '#empty' => array(),
       '#list_type' => 'ul',

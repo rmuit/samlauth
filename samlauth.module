@@ -25,43 +25,6 @@ function samlauth_help($route_name, RouteMatchInterface $route_match) {
 }
 
 /**
- * Returns configuration array for SAML SP.
- */
-function samlauth_get_config() {
-  $config = \Drupal::config('samlauth.authentication');
-  return array(
-    'sp' => array(
-      'entityId' => $config->get('sp_entity_id'),
-      'assertionConsumerService' => array(
-        'url' => \Drupal::urlGenerator()->generateFromRoute('samlauth.saml_controller_acs', array(), array('absolute' => TRUE)),
-      ),
-      'singleLogoutService' => array(
-        'url' => \Drupal::urlGenerator()->generateFromRoute('samlauth.saml_controller_sls', array(), array('absolute' => TRUE)),
-      ),
-      'NameIDFormat' => $config->get('sp_name_id_format'),
-      'x509cert' => $config->get('sp_x509_certificate'),
-      'privateKey' => $config->get('sp_private_key'),
-    ),
-    'idp' => array (
-      'entityId' => $config->get('idp_entity_id'),
-      'singleSignOnService' => array (
-        'url' => $config->get('idp_single_sign_on_service'),
-      ),
-      'singleLogoutService' => array (
-        'url' => $config->get('idp_single_log_out_service'),
-      ),
-      'x509cert' => $config->get('idp_x509_certificate'),
-    ),
-    'security' => array(
-      'authnRequestsSigned' => $config->get('security_authn_requests_sign') ? TRUE : FALSE,
-      'wantMessagesSigned' => $config->get('security_messages_sign') ? TRUE : FALSE,
-      'wantNameIdSigned' => $config->get('security_name_id_sign') ? TRUE : FALSE,
-      'requestedAuthnContext' => $config->get('security_request_authn_context') ? TRUE : FALSE,
-    ),
-  );
-}
-
-/**
  * Implements hook_form_FORM_ID_alter().
  */
 function samlauth_form_user_login_form_alter(&$form, FormStateInterface $form_state) {

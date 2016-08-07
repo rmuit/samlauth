@@ -2,10 +2,11 @@
 
 /**
  * @file
- * Contains Drupal\samlauth\SamlService.
+ * Contains Drupal\samlauth\SamlUserService.
  */
 
 namespace Drupal\samlauth;
+
 use \Exception;
 use Drupal\Core\Config\ConfigFactoryInterface;
 use Drupal\Core\Session\AccountInterface;
@@ -28,16 +29,16 @@ class SamlUserService {
   protected $user_data;
 
   /**
-   * Instance of ConfigFactoryInterface.
+   * A configuration object containing samlauth settings.
    *
-   * @var Drupal\Core\Config\ConfigFactoryInterface $config
+   * @var \Drupal\Core\Config\ImmutableConfig
    */
   protected $config;
 
   /**
-   * Instance of LoggerInterface.
+   * A logger instance.
    *
-   * @var \Psr\Log\LoggerInterface $logger
+   * @var \Psr\Log\LoggerInterface
    */
   protected $logger;
 
@@ -138,13 +139,6 @@ class SamlUserService {
     }
 
     user_login_finalize($account);
-  }
-
-  /**
-   * Ends the current session.
-   */
-  public function logout() {
-    user_logout();
   }
 
   /**
