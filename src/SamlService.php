@@ -11,7 +11,9 @@ use Drupal\Core\Config\ConfigFactoryInterface;
 use Drupal\Core\Config\ImmutableConfig;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\Core\Url;
+use Drupal\externalauth\ExternalAuth;
 use Drupal\user\UserInterface;
+use Exception;
 use InvalidArgumentException;
 use OneLogin_Saml2_Auth;
 use OneLogin_Saml2_Error;
@@ -29,7 +31,14 @@ class SamlService {
    *
    * @var \OneLogin_Saml2_Auth
    */
-  protected $auth;
+  protected $samlAuth;
+
+  /**
+   * The ExternalAuth service.
+   *
+   * @var \Drupal\externalauth\ExternalAuth
+   */
+  protected $externalAuth;
 
   /**
    * A configuration object containing samlauth settings.
@@ -55,6 +64,8 @@ class SamlService {
   /**
    * Constructor for Drupal\samlauth\SamlService.
    *
+   * @param \Drupal\externalauth\ExternalAuth $external_auth
+   *   The ExternalAuth service.
    * @param \Drupal\Core\Config\ConfigFactoryInterface $config_factory
    *   The config factory.
    * @param \Drupal\Core\Entity\EntityTypeManagerInterface $entity_type_manager
@@ -62,11 +73,32 @@ class SamlService {
    * @param \Psr\Log\LoggerInterface $logger
    *   A logger instance.
    */
-  public function __construct(ConfigFactoryInterface $config_factory, EntityTypeManagerInterface $entity_type_manager, LoggerInterface $logger) {
+  public function __construct(ExternalAuth $external_auth, ConfigFactoryInterface $config_factory, EntityTypeManagerInterface $entity_type_manager, LoggerInterface $logger) {
+    $this->externalAuth = $external_auth;
     $this->config = $config_factory->get('samlauth.authentication');
     $this->entityTypeManager = $entity_type_manager;
     $this->logger = $logger;
-    $this->auth = new OneLogin_Saml2_Auth(static::reformatConfig($this->config));
+    $this->samlAuth = new OneLogin_Saml2_Auth(static::reformatConfig($this->config));
+  }
+
+  /**
+   * Returns the route name that users will be redirected to after authenticating.
+   *
+   * @return string
+   * @todo make this configurable
+   */
+  public function getPostLoginDestination() {
+    return 'user.page';
+  }
+
+  /**
+   * Returns the route name that users will be redirected to after logging out.
+   *
+   * @return string
+   * @todo make this configurable
+   */
+  public function getPostLogoutDestination() {
+    return '<front>';
   }
 
   /**
@@ -76,7 +108,7 @@ class SamlService {
    * @throws InvalidArgumentException
    */
   public function getMetadata() {
-    $settings = $this->auth->getSettings();
+    $settings = $this->samlAuth->getSettings();
     $metadata = $settings->getSPMetadata();
     $errors = $settings->validateMetadata($metadata);
 
@@ -100,10 +132,10 @@ class SamlService {
    */
   public function login($return_to = null) {
     if (!$return_to) {
-      $sp_config = $this->auth->getSettings()->getSPData();
+      $sp_config = $this->samlAuth->getSettings()->getSPData();
       $return_to = $sp_config['assertionConsumerService']['url'];
     }
-    $this->auth->login($return_to);
+    $this->samlAuth->login($return_to);
   }
 
   /**
@@ -115,30 +147,75 @@ class SamlService {
    */
   public function logout($return_to = null) {
     if (!$return_to) {
-      $sp_config = $this->auth->getSettings()->getSPData();
+      $sp_config = $this->samlAuth->getSettings()->getSPData();
       $return_to = $sp_config['singleLogoutService']['url'];
     }
     user_logout();
-    $this->auth->logout($return_to, array('referrer' => $return_to));
+    $this->samlAuth->logout($return_to, array('referrer' => $return_to));
   }
 
   /**
    * Processes a SAML response (Assertion Consumer Service).
    *
-   * @return array|null
-   *   Returns array with error description on error. Null otherwise.
-   * @throws \OneLogin_Saml2_Error
+   * First checks whether the SAML request is OK, then takes action on the
+   * Drupal user (logs in / maps existing / create new) depending on attributes
+   * sent in the request and our module configuration.
+   *
+   * @throws Exception
    */
   public function acs() {
-    $this->auth->processResponse();
-    $errors = $this->auth->getErrors();
-
+    // This call can either set an error condition or throw a
+    // \OneLogin_Saml2_Error exception, depending on whether or not we are
+    // processing a POST request. Don't catch the exception.
+    $this->samlAuth->processResponse();
+    // Now look if there were any errors and also throw.
+    $errors = $this->samlAuth->getErrors();
     if (!empty($errors)) {
-      return $errors;
+      // We have one or multiple error types / short descriptions, and one
+      // 'reason' for the last error.
+      throw new Exception('Error(s) encountered during processing of ACS response. Type(s): ' . implode(', ', array_unique($errors)) . '; reason given for last error: ' . $this->samlAuth->getLastErrorReason());
     }
 
     if (!$this->isAuthenticated()) {
-      return array('error' => 'Could not authenticate.');
+      throw new Exception('Could not authenticate.');
+    }
+
+    $unique_id = $this->getAttributeByConfig('unique_id_attribute');
+    if (!$unique_id) {
+      throw new Exception('Configured unique ID is not present in SAML response.');
+    }
+
+    $account = $this->externalAuth->load($unique_id, 'samlauth');
+    if (!$account) {
+      $this->logger->debug('No matching local users found for unique SAML ID @saml_id.', array('@saml_id' => $unique_id));
+
+      // @todo use the regular mail attribute config for this?
+      $map_mail = $this->getAttributeByConfig('map_users_email');
+      if ($this->config->get('map_users') && $map_mail
+          && $account_search = $this->entityTypeManager->getStorage('user')->loadByProperties(array('mail' => $map_mail))) {
+        $account = reset($account_search);
+        $this->logger->info('Matching local user @uid found for e-mail @mail in SAML data; associating user and logging in.', array('@mail' => $map_mail, '@uid' => $account->id()));
+        // An existing 'samlauth' link for the account will be overwritten.
+        $this->externalAuth->linkExistingAccount($unique_id, 'samlauth', $account);
+        $this->externalAuth->userLoginFinalize($account, $unique_id, 'samlauth');
+      }
+
+      // @todo: we should first try to link existing accounts by _user_ too;
+      //        externalauth will throw an exception if an account with the same
+      //        name exists and we are doing nothing to prevent that.
+      elseif ($this->config->get('create_users')) {
+        $account = $this->externalAuth->register($unique_id, 'samlauth');
+        $this->externalAuth->userLoginFinalize($account, $unique_id, 'samlauth');
+      }
+      else {
+        throw new Exception('No existing user account matches the SAML ID provided. This authentication service is not configured to create new accounts.');
+      }
+    }
+    elseif ($account->isBlocked()) {
+      throw new Exception('Requested account is blocked.');
+    }
+    else {
+      $this->externalAuth->userLoginFinalize($account, $unique_id, 'samlauth');
     }
   }
 
@@ -146,10 +223,7 @@ class SamlService {
    * Does processing for the Single Logout Service if necessary.
    */
   public function sls() {
-    // @todo we already called user_logout() at the start of the logout
-    // procedure i.e. at logout(). The route that leads here is only accessible
-    // for authenticated user. So will this never be executed and should we
-    // change this code?
+    // @todo change; see SamlController::sls().
     user_logout();
   }
 
@@ -212,11 +286,6 @@ class SamlService {
     }
   }
 
-  // Helper function.
-  public function getData() {
-    return $this->auth->getAttributes();
-  }
-
   /**
    * Returns an attribute value in a SAML response. This method will return
    * valid data after a response is processed (i.e. after acs() was called).
@@ -232,7 +301,7 @@ class SamlService {
   public function getAttributeByConfig($config_key) {
     $attribute_name = $this->config->get($config_key);
     if ($attribute_name) {
-      $attribute = $this->auth->getAttribute($attribute_name);
+      $attribute = $this->samlAuth->getAttribute($attribute_name);
       if (!empty($attribute[0])) {
         return $attribute[0];
       }
@@ -243,7 +312,7 @@ class SamlService {
    * @return bool if a valid user was fetched from the saml assertion this request.
    */
   protected function isAuthenticated() {
-    return $this->auth->isAuthenticated();
+    return $this->samlAuth->isAuthenticated();
   }
 
   /**

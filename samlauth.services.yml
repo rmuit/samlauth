@@ -1,7 +1,4 @@
 services:
   samlauth.saml:
     class: Drupal\samlauth\SamlService
-    arguments: [ '@config.factory', '@entity_type.manager', '@logger.channel.externalauth' ]
-  samlauth.saml_user:
-    class: Drupal\samlauth\SamlUserService
     arguments: [ '@externalauth.externalauth', '@config.factory', '@entity_type.manager', '@logger.channel.externalauth' ]

@@ -9,7 +9,6 @@ namespace Drupal\samlauth\Controller;
 
 use Exception;
 use Drupal\samlauth\SamlService;
-use Drupal\samlauth\SamlUserService;
 use Drupal\Core\Controller\ControllerBase;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 use Symfony\Component\HttpFoundation\RedirectResponse;
@@ -30,20 +29,13 @@ class SamlController extends ControllerBase {
   protected $saml;
 
   /**
-   * @var \Drupal\samlauth\SamlUserService
-   */
-  protected $saml_user;
-
-  /**
    * Constructor for Drupal\samlauth\Controller\SamlController.
    *
    * @param \Drupal\samlauth\SamlService $saml
    *   The samlauth SAML service.
-   * @param \Drupal\samlauth\SamlUserService $saml_user
    */
-  public function __construct(SamlService $saml, SamlUserService $saml_user) {
+  public function __construct(SamlService $saml) {
     $this->saml = $saml;
-    $this->saml_user = $saml_user;
   }
 
   /**
@@ -54,8 +46,7 @@ class SamlController extends ControllerBase {
    */
   public static function create(ContainerInterface $container) {
     return new static(
-      $container->get('samlauth.saml'),
-      $container->get('samlauth.saml_user')
+      $container->get('samlauth.saml')
     );
   }
 
@@ -98,21 +89,15 @@ class SamlController extends ControllerBase {
    * @return \Symfony\Component\HttpFoundation\RedirectResponse
    */
   public function acs() {
-    $errors = $this->saml->acs();
-    if (!empty($errors)) {
-      drupal_set_message($this->t('An error occured.'), 'error');
-      return new RedirectResponse('/');
-    }
-
     try {
-      $saml_data = $this->saml->getData();
-      $this->saml_user->handleSamlData($saml_data);
+      $this->saml->acs();
     }
     catch (Exception $e) {
       drupal_set_message($e->getMessage(), 'error');
+      return new RedirectResponse('/');
     }
 
-    $route = $this->saml_user->getPostLoginDestination();
+    $route = $this->saml->getPostLoginDestination();
     $url = \Drupal::urlGenerator()->generateFromRoute($route);
     return new RedirectResponse($url);
   }
@@ -127,13 +112,16 @@ class SamlController extends ControllerBase {
    *
    * @todo we already called user_logout() at the start of the logout
    *   procedure i.e. at logout(). The route that leads here is only accessible
-   *   for authenticated user. So will this never be executed and should we
-   *   change this code?
+   *   for authenticated user. So in a logout flow where the user starts at
+   *   /saml/logout, this will never be executed and the user gets an "Access
+   *   denied" message when returning to /saml/sls; this code is never executed.
+   *   We should probably change the access rights and do more checking inside
+   *   this function whether we should still log out.
    */
   public function sls() {
     $this->saml->sls();
 
-    $route = $this->saml_user->getPostLogoutDestination();
+    $route = $this->saml->getPostLogoutDestination();
     $url = \Drupal::urlGenerator()->generateFromRoute($route);
     return new RedirectResponse($url);
   }
