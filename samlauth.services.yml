@@ -2,3 +2,8 @@ services:
   samlauth.saml:
     class: Drupal\samlauth\SamlService
     arguments: [ '@externalauth.externalauth', '@config.factory', '@entity_type.manager', '@logger.channel.externalauth' ]
+#  samlauth.event_subscriber:
+#    class: Drupal\samlauth\EventSubscriber\SamlauthEventSubscriber
+#    arguments: ['@config.factory', '@logger.channel.externalauth']
+#    tags:
+#      - {name: event_subscriber}
