@@ -1,0 +1,9 @@
+user_mapping:
+  attributes: "User.email\r\nUser.FirstName\r\nUser.LastName"
+route:
+  login: user.page
+  logout: '<front>'
+account:
+  username: '[samlauth-account:attribute:User.email]'
+  linking:
+    conjunction: AND

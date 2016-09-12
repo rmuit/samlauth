@@ -1,0 +1,64 @@
+user_mapping:
+  access:
+    attribute: ''
+    settings:
+      use_account_linking: 0
+  changed:
+    attribute: ''
+    settings:
+      use_account_linking: 0
+  created:
+    attribute: ''
+    settings:
+      use_account_linking: 0
+  default_langcode:
+    attribute: ''
+    settings:
+      use_account_linking: 0
+  init:
+    attribute: ''
+    settings:
+      use_account_linking: 0
+  langcode:
+    attribute: ''
+    settings:
+      use_account_linking: 0
+  login:
+    attribute: ''
+    settings:
+      use_account_linking: 0
+  mail:
+    attribute: User.email
+    settings:
+      use_account_linking: '1'
+  name:
+    attribute: User.LastName
+    settings:
+      use_account_linking: 0
+  pass:
+    attribute: ''
+    settings:
+      use_account_linking: 0
+  preferred_admin_langcode:
+    attribute: ''
+    settings:
+      use_account_linking: 0
+  preferred_langcode:
+    attribute: ''
+    settings:
+      use_account_linking: 0
+  roles:
+    attribute: ''
+    settings:
+      use_account_linking: 0
+  status:
+    attribute: ''
+    settings:
+      use_account_linking: 0
+  timezone:
+    attribute: ''
+    settings:
+      use_account_linking: 0
+user_roles:
+  assigned_role:
+    administrator: administrator
