@@ -7,12 +7,15 @@ use Drupal\Core\Config\ImmutableConfig;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\Core\Url;
 use Drupal\externalauth\ExternalAuth;
+use Drupal\samlauth\Event\SamlauthEvents;
+use Drupal\samlauth\Event\SamlauthUserSyncEvent;
 use Drupal\user\UserInterface;
 use Exception;
 use InvalidArgumentException;
 use OneLogin_Saml2_Auth;
 use OneLogin_Saml2_Error;
 use Psr\Log\LoggerInterface;
+use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 
 /**
  * Governs communication between the SAML toolkit and the IDP / login behavior.
@@ -55,6 +58,13 @@ class SamlService {
   protected $logger;
 
   /**
+   * The event dispatcher.
+   *
+   * @var \Symfony\Component\EventDispatcher\EventDispatcherInterface
+   */
+  protected $eventDispatcher;
+
+  /**
    * Constructor for Drupal\samlauth\SamlService.
    *
    * @param \Drupal\externalauth\ExternalAuth $external_auth
@@ -65,12 +75,15 @@ class SamlService {
    *   The EntityTypeManager service.
    * @param \Psr\Log\LoggerInterface $logger
    *   A logger instance.
+   * @param \Symfony\Component\EventDispatcher\EventDispatcherInterface $event_dispatcher
+   *   The event dispatcher.
    */
-  public function __construct(ExternalAuth $external_auth, ConfigFactoryInterface $config_factory, EntityTypeManagerInterface $entity_type_manager, LoggerInterface $logger) {
+  public function __construct(ExternalAuth $external_auth, ConfigFactoryInterface $config_factory, EntityTypeManagerInterface $entity_type_manager, LoggerInterface $logger, EventDispatcherInterface $event_dispatcher) {
     $this->externalAuth = $external_auth;
     $this->config = $config_factory->get('samlauth.authentication');
     $this->entityTypeManager = $entity_type_manager;
     $this->logger = $logger;
+    $this->eventDispatcher = $event_dispatcher;
     $this->samlAuth = new OneLogin_Saml2_Auth(static::reformatConfig($this->config));
   }
 
@@ -197,7 +210,19 @@ class SamlService {
       //        externalauth will throw an exception if an account with the same
       //        name exists and we are doing nothing to prevent that.
       elseif ($this->config->get('create_users')) {
+        // The register() call will save the account. We want to:
+        // - add values from the SAML response into the user account;
+        // - not save the account twice (because if the second save fails we do
+        //   not want to end up with a user account in an undetermined state);
+        // - reuse code (i.e. call synchronizeUserAttributes() with its current
+        //   signature, which is also done when an existing user logs in).
+        // Because of the third point, we are not passing the necessary SAML
+        // attributes into register()'s $account_data parameter, but we want to
+        // hook into the save operation of the user account object that is
+        // created by register(). It seems we can only do this by implementing
+        // hook_user_presave() - which calls our synchronizeUserAttributes().
         $account = $this->externalAuth->register($unique_id, 'samlauth');
+
         $this->externalAuth->userLoginFinalize($account, $unique_id, 'samlauth');
       }
       else {
@@ -208,6 +233,9 @@ class SamlService {
       throw new Exception('Requested account is blocked.');
     }
     else {
+      // Synchronize the user account with SAML attributes if needed.
+      $this->synchronizeUserAttributes($account);
+
       $this->externalAuth->userLoginFinalize($account, $unique_id, 'samlauth');
     }
   }
@@ -239,6 +267,7 @@ class SamlService {
   public function synchronizeUserAttributes(UserInterface $account) {
     $sync_mail = $account->isNew(); //  || $this->config->get('sync.mail');
     $sync_user_name = $account->isNew(); // || $this->config->get('sync.user_name');
+    $save = FALSE;
 
     if ($sync_user_name) {
       $name = $this->getAttributeByConfig('user_name_attribute');
@@ -253,8 +282,9 @@ class SamlService {
           }
         }
 
-        if (!$existing) {
+        if (!$existing && $name !== $account->getAccountName()) {
           $account->setUsername($name);
+          $save = TRUE;
         }
       }
       else {
@@ -265,18 +295,39 @@ class SamlService {
 
     if ($sync_mail) {
       $mail = $this->getAttributeByConfig('user_mail_attribute');
-      if ($mail) {
+      if ($mail && $mail !== $account->getEmail()) {
         $account->setEmail($mail);
         if ($account->isNew()) {
           // externalauth sets 'init' to a non e-mail value so we will fix it.
           $account->set('init', $mail);
         }
+        $save = TRUE;
       }
       else {
         $this->logger->critical("Error on synchronizing mail attribute: no email address available for Drupal user %id.", ['%id' => $account->id()]);
         drupal_set_message(t('Error synchronizing mail: no email address is provided by SAML.'), 'error');
       }
     }
+
+    // Dispatch a user_sync event.
+    $event = new SamlauthUserSyncEvent($account, $this->getAttributes());
+    $this->eventDispatcher->dispatch(SamlauthEvents::USER_SYNC, $event);
+
+    // Save the account if we changed attributes earlier on, but never if the
+    // account is new because then we're in the middle of a save operation.
+    if (($save || $event->isAccountChanged()) && !$account->isNew()) {
+      $account->save();
+    }
+  }
+
+  /**
+   * Returns all attributes in a SAML response.
+   *
+   * @return array
+   *   An array with all returned SAML attributes..
+   */
+  public function getAttributes() {
+    return $this->samlAuth->getAttributes();
   }
 
   /**

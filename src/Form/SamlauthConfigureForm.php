@@ -190,7 +190,7 @@ class SamlauthConfigureForm extends ConfigFormBase {
 
     $form['user_info']['map_users'] = array(
       '#type' => 'checkbox',
-      '#title' => $this->t('Attempt to map SAML users to existing local users?'),
+      '#title' => $this->t('Attempt to map SAML users to existing local users'),
       '#description' => $this->t('If this option is enabled and a SAML authentication response is received for a user that already exists locally, and the user\'s email matches the configured attribute, the SAML user will be mapped to the local user and then logged in.'),
       '#default_value' => $config->get('map_users'),
     );
@@ -209,7 +209,7 @@ class SamlauthConfigureForm extends ConfigFormBase {
 
     $form['user_info']['create_users'] = array(
       '#type' => 'checkbox',
-      '#title' => $this->t('Create users specified by SAML server?'),
+      '#title' => $this->t('Create users specified by SAML server'),
       '#description' => $this->t('If this option is enabled, users that do not exist in the Drupal database will be created if specified by a successful SAML authentication response.'),
       '#default_value' => $config->get('create_users'),
     );
