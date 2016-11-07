@@ -326,6 +326,7 @@ class SamlService {
    */
   protected static function reformatConfig(ImmutableConfig $config) {
     return array(
+      'debug' => $config->get('debug') ? TRUE : FALSE,
       'sp' => array(
         'entityId' => $config->get('sp_entity_id'),
         'assertionConsumerService' => array(

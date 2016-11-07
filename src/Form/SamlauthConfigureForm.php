@@ -235,6 +235,17 @@ class SamlauthConfigureForm extends ConfigFormBase {
       '#default_value' => $config->get('security_request_authn_context'),
     );
 
+    $form['debugging'] = array(
+      '#title' => $this->t('Debugging'),
+      '#type' => 'fieldset',
+    );
+
+    $form['debugging']['debug'] = array(
+      '#type' => 'checkbox',
+      '#title' => $this->t('Enable debugging'),
+      '#default_value' => $config->get('debug'),
+    );
+
     return parent::buildForm($form, $form_state);
   }
 
@@ -273,6 +284,7 @@ class SamlauthConfigureForm extends ConfigFormBase {
       ->set('security_messages_sign', $form_state->getValue('security_messages_sign'))
       ->set('security_name_id_sign', $form_state->getValue('security_name_id_sign'))
       ->set('security_request_authn_context', $form_state->getValue('security_request_authn_context'))
+      ->set('debug', $form_state->getValue('debug'))
       ->save();
   }
 }
