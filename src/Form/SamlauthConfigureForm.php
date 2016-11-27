@@ -184,33 +184,21 @@ class SamlauthConfigureForm extends ConfigFormBase {
     $form['user_info']['unique_id_attribute'] = array(
       '#type' => 'textfield',
       '#title' => $this->t('Unique identifier attribute'),
-      '#description' => $this->t('Specify a SAML attribute that is always going to be unique on a per-user basis. This will be used to identify local users (and create new ones if the option is enabled.<br />Example: <em>eduPersonPrincipalName</em> or <em>eduPersonTargetedID</em>'),
+      '#description' => $this->t("Specify a SAML attribute that is always going to be unique per user. This will be used to identify local users through an 'auth mapping' (which is stored separately from the user account info).<br>Example: <em>eduPersonPrincipalName</em> or <em>eduPersonTargetedID</em>"),
       '#default_value' => $config->get('unique_id_attribute') ?: 'eduPersonTargetedID',
     );
 
     $form['user_info']['map_users'] = array(
       '#type' => 'checkbox',
       '#title' => $this->t('Attempt to map SAML users to existing local users'),
-      '#description' => $this->t('If this option is enabled and a SAML authentication response is received for a user that already exists locally, and the user\'s email matches the configured attribute, the SAML user will be mapped to the local user and then logged in.'),
+      '#description' => $this->t('If this option is enabled and the SAML authentication response is not mapped to a user yet, but the name / e-mail attribute matches an existing non-mapped user, the SAML user will be mapped to the user.'),
       '#default_value' => $config->get('map_users'),
-    );
-
-    $form['user_info']['map_users_email'] = array(
-      '#type' => 'textfield',
-      '#title' => $this->t('Email attribute (for mapping)'),
-      '#description' => $this->t('This attribute will be used for mapping SAML users to local Drupal users.'),
-      '#default_value' => $config->get('map_users_email'),
-      '#states' => array(
-        'invisible' => array(
-          ':input[name="map_users"]' => array('checked' => FALSE),
-        ),
-      ),
     );
 
     $form['user_info']['create_users'] = array(
       '#type' => 'checkbox',
       '#title' => $this->t('Create users specified by SAML server'),
-      '#description' => $this->t('If this option is enabled, users that do not exist in the Drupal database will be created if specified by a successful SAML authentication response.'),
+      '#description' => $this->t('If this option is enabled and the SAML authentication response is not mapped to a user, a new user is created using the name / e-mail attributes from the response.'),
       '#default_value' => $config->get('create_users'),
     );
 
@@ -231,10 +219,11 @@ class SamlauthConfigureForm extends ConfigFormBase {
     $form['user_info']['user_name_attribute'] = array(
       '#type' => 'textfield',
       '#title' => $this->t('User name attribute'),
-      '#description' => $this->t('When SAML users are created, this field specifies which SAML attribute should be used for the Drupal user name.<br />Example: <em>cn</em> or <em>eduPersonPrincipalName</em>'),
+      '#description' => $this->t('When SAML users are mapped / created, this field specifies which SAML attribute should be used for the Drupal user name.<br />Example: <em>cn</em> or <em>eduPersonPrincipalName</em>'),
       '#default_value' => $config->get('user_name_attribute') ?: 'cn',
       '#states' => array(
         'invisible' => array(
+          ':input[name="map_users"]' => array('checked' => FALSE),
           ':input[name="create_users"]' => array('checked' => FALSE),
         ),
       ),
@@ -243,10 +232,11 @@ class SamlauthConfigureForm extends ConfigFormBase {
     $form['user_info']['user_mail_attribute'] = array(
       '#type' => 'textfield',
       '#title' => $this->t('User email attribute'),
-      '#description' => $this->t('When SAML users are created, this field specifies which SAML attribute should be used for the Drupal email address.<br />Example: <em>mail</em>'),
+      '#description' => $this->t('When SAML users are mapped / created, this field specifies which SAML attribute should be used for the Drupal email address.<br />Example: <em>mail</em>'),
       '#default_value' => $config->get('user_mail_attribute') ?: 'email',
       '#states' => array(
         'invisible' => array(
+          ':input[name="map_users"]' => array('checked' => FALSE),
           ':input[name="create_users"]' => array('checked' => FALSE),
         ),
       ),
@@ -340,7 +330,6 @@ class SamlauthConfigureForm extends ConfigFormBase {
       ->set('idp_x509_certificate', $form_state->getValue('idp_x509_certificate'))
       ->set('unique_id_attribute', $form_state->getValue('unique_id_attribute'))
       ->set('map_users', $form_state->getValue('map_users'))
-      ->set('map_users_email', $form_state->getValue('map_users_email'))
       ->set('create_users', $form_state->getValue('create_users'))
       ->set('sync_name', $form_state->getValue('sync_name'))
       ->set('sync_mail', $form_state->getValue('sync_mail'))

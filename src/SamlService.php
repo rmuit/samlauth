@@ -8,6 +8,7 @@ use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\Core\Url;
 use Drupal\externalauth\ExternalAuth;
 use Drupal\samlauth\Event\SamlauthEvents;
+use Drupal\samlauth\Event\SamlauthUserLinkEvent;
 use Drupal\samlauth\Event\SamlauthUserSyncEvent;
 use Drupal\user\UserInterface;
 use Exception;
@@ -195,21 +196,49 @@ class SamlService {
     if (!$account) {
       $this->logger->debug('No matching local users found for unique SAML ID @saml_id.', array('@saml_id' => $unique_id));
 
-      // @todo use the regular mail attribute config for this?
-      $map_mail = $this->getAttributeByConfig('map_users_email');
-      if ($this->config->get('map_users') && $map_mail
-          && $account_search = $this->entityTypeManager->getStorage('user')->loadByProperties(array('mail' => $map_mail))) {
-        $account = reset($account_search);
-        $this->logger->info('Matching local user @uid found for e-mail @mail in SAML data; associating user and logging in.', array('@mail' => $map_mail, '@uid' => $account->id()));
-        // An existing 'samlauth' link for the account will be overwritten.
-        $this->externalAuth->linkExistingAccount($unique_id, 'samlauth', $account);
-        $this->externalAuth->userLoginFinalize($account, $unique_id, 'samlauth');
+      // Try to link an existing user: first through a custom event handler,
+      // then by name, then by e-mail.
+      if ($this->config->get('map_users')) {
+        $event = new SamlauthUserLinkEvent($this->getAttributes());
+        $this->eventDispatcher->dispatch(SamlauthEvents::USER_LINK, $event);
+        $account = $event->getLinkedAccount();
+        if (!$account) {
+          // The linking by name / e-mail cannot be bypassed at this point
+          // because it makes no sense to create a new account from the SAML
+          // attributes if one of these two basic properties is already in use.
+          // (In this case a newly created and logged-in account would get a
+          // cryptic machine name because  synchronizeUserAttributes() cannot
+          // assign the proper name while saving.)
+          $name = $this->getAttributeByConfig('user_name_attribute');
+          if ($name && $account_search = $this->entityTypeManager->getStorage('user')->loadByProperties(array('name' => $name))) {
+            $account = reset($account_search);
+            $this->logger->info('Matching local user @uid found for name @name (as provided in a SAML attribute); associating user and logging in.', array('@name' => $name, '@uid' => $account->id()));
+          }
+          else {
+            $mail = $this->getAttributeByConfig('user_mail_attribute');
+            if ($mail && $account_search = $this->entityTypeManager->getStorage('user')->loadByProperties(array('mail' => $mail))) {
+              $account = reset($account_search);
+              $this->logger->info('Matching local user @uid found for e-mail @mail (as provided in a SAML attribute); associating user and logging in.', array('@mail' => $mail, '@uid' => $account->id()));
+            }
+          }
+        }
       }
 
-      // @todo: we should first try to link existing accounts by _user_ too;
-      //        externalauth will throw an exception if an account with the same
-      //        name exists and we are doing nothing to prevent that.
-      elseif ($this->config->get('create_users')) {
+      if ($account) {
+        // There is a chance that the following call will not actually link the
+        // account (if a mapping to this account already exists from another
+        // unique ID). If that happens, it does not matter much to us; we will
+        // just log the account in anyway. Next time the same not-yet-linked
+        // user logs in, we will again try to link the account in the same way
+        // and (falsely) log that we are associating the user.
+        $this->externalAuth->linkExistingAccount($unique_id, 'samlauth', $account);
+      }
+    }
+
+    // If we haven't found an account to link, create one from the SAML
+    // attributes.
+    if (!$account) {
+      if ($this->config->get('create_users')) {
         // The register() call will save the account. We want to:
         // - add values from the SAML response into the user account;
         // - not save the account twice (because if the second save fails we do
