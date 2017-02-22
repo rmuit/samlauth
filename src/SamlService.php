@@ -251,77 +251,26 @@ class SamlService {
   /**
    * Synchronizes user data with attributes in the SAML request.
    *
-   * Currently does not actually sync attributes on login because no "sync"
-   * settings are implemented yet. (Note syncing-on-login is not the same as
-   * 'map users'.) This at least is a first step to implementing it though.
-   * Currently this is only called for adding user data from SAML attributes
-   * into new accounts before saving, and not all checks are actually necessary
-   * yet.
-   *
-   * Code borrowed from simplesamlphp_auth module with thanks & the intention to
-   * keep code bases similar where that makes sense.
-   *
    * @param \Drupal\user\UserInterface $account
    *   The Drupal user to synchronize attributes into.
+   * @param bool $skip_save
+   *   (optional) If TRUE, skip saving the user account.
    */
-  public function synchronizeUserAttributes(UserInterface $account) {
-    $sync_mail = $account->isNew(); //  || $this->config->get('sync.mail');
-    $sync_user_name = $account->isNew(); // || $this->config->get('sync.user_name');
-    $save = FALSE;
-
-    if ($sync_user_name) {
-      $name = $this->getAttributeByConfig('user_name_attribute');
-      if ($name) {
-        $existing = FALSE;
-        $account_search = $this->entityTypeManager->getStorage('user')->loadByProperties(array('name' => $name));
-        if ($existing_account = reset($account_search)) {
-          if ($account->id() != $existing_account->id()) {
-            $existing = TRUE;
-            $this->logger->critical("Error on synchronizing name attribute: an account with the username %username already exists.", ['%username' => $name]);
-            drupal_set_message(t('Error synchronizing username: an account with this username already exists.'), 'error');
-          }
-        }
-
-        if (!$existing && $name !== $account->getAccountName()) {
-          $account->setUsername($name);
-          $save = TRUE;
-        }
-      }
-      else {
-        $this->logger->critical("Error on synchronizing name attribute: no username available for Drupal user %id.", ['%id' => $account->id()]);
-        drupal_set_message(t('Error synchronizing username: no username is provided by SAML.'), 'error');
-      }
-    }
-
-    if ($sync_mail) {
-      $mail = $this->getAttributeByConfig('user_mail_attribute');
-      if ($mail && $mail !== $account->getEmail()) {
-        $account->setEmail($mail);
-        if ($account->isNew()) {
-          // externalauth sets 'init' to a non e-mail value so we will fix it.
-          $account->set('init', $mail);
-        }
-        $save = TRUE;
-      }
-      else {
-        $this->logger->critical("Error on synchronizing mail attribute: no email address available for Drupal user %id.", ['%id' => $account->id()]);
-        drupal_set_message(t('Error synchronizing mail: no email address is provided by SAML.'), 'error');
-      }
-    }
-
+  public function synchronizeUserAttributes(UserInterface $account, $skip_save = FALSE) {
     // Dispatch a user_sync event.
     $event = new SamlauthUserSyncEvent($account, $this->getAttributes());
     $this->eventDispatcher->dispatch(SamlauthEvents::USER_SYNC, $event);
 
-    // Save the account if we changed attributes earlier on, but never if the
-    // account is new because then we're in the middle of a save operation.
-    if (($save || $event->isAccountChanged()) && !$account->isNew()) {
+    if (!$skip_save && $event->isAccountChanged()) {
       $account->save();
     }
   }
 
   /**
    * Returns all attributes in a SAML response.
+   *
+   * This method will return valid data after a response is processed (i.e.
+   * after samlAuth->processResponse() is called).
    *
    * @return array
    *   An array with all returned SAML attributes..
@@ -331,10 +280,12 @@ class SamlService {
   }
 
   /**
-   * Returns an attribute value in a SAML response. This method will return
-   * valid data after a response is processed (i.e. after acs() was called).
+   * Returns value from a SAML attribute whose name is configured in our module.
    *
-   * @param string
+   * This method will return valid data after a response is processed (i.e.
+   * after samlAuth->processResponse() is called).
+   *
+   * @param string $config_key
    *   A key in the module's configuration, containing the name of a SAML
    *   attribute.
    *

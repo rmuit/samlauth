@@ -214,6 +214,20 @@ class SamlauthConfigureForm extends ConfigFormBase {
       '#default_value' => $config->get('create_users'),
     );
 
+    $form['user_info']['sync_name'] = array(
+      '#type' => 'checkbox',
+      '#title' => $this->t('Synchronize user name on every login'),
+      '#default_value' => $config->get('sync_name'),
+      '#description' => $this->t('If this option is enabled, any changes to the name of SAML users will be propagated into Drupal user accounts.'),
+    );
+
+    $form['user_info']['sync_mail'] = array(
+      '#type' => 'checkbox',
+      '#title' => $this->t('Synchronize email address on every login'),
+      '#default_value' => $config->get('sync_mail'),
+      '#description' => $this->t('If this option is enabled, any changes to the email address of SAML users will be propagated into Drupal user accounts.'),
+    );
+
     $form['user_info']['user_name_attribute'] = array(
       '#type' => 'textfield',
       '#title' => $this->t('User name attribute'),
@@ -328,6 +342,8 @@ class SamlauthConfigureForm extends ConfigFormBase {
       ->set('map_users', $form_state->getValue('map_users'))
       ->set('map_users_email', $form_state->getValue('map_users_email'))
       ->set('create_users', $form_state->getValue('create_users'))
+      ->set('sync_name', $form_state->getValue('sync_name'))
+      ->set('sync_mail', $form_state->getValue('sync_mail'))
       ->set('user_name_attribute', $form_state->getValue('user_name_attribute'))
       ->set('user_mail_attribute', $form_state->getValue('user_mail_attribute'))
       ->set('security_authn_requests_sign', $form_state->getValue('security_authn_requests_sign'))

@@ -69,7 +69,7 @@ function samlauth_user_presave(UserInterface $account) {
     /** @var \Drupal\samlauth\SamlService $saml_service */
     $saml_service = \Drupal::service('samlauth.saml');
     if ($saml_service->getAttributeByConfig('user_name_attribute')) {
-      $saml_service->synchronizeUserAttributes($account);
+      $saml_service->synchronizeUserAttributes($account, TRUE);
     }
   }
 }

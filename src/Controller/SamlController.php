@@ -86,7 +86,9 @@ class SamlController extends ControllerBase {
       $this->saml->acs();
     }
     catch (Exception $e) {
-      drupal_set_message($e->getMessage(), 'error');
+      $message = 'While processing SAML authentication response: ' . $e->getMessage();
+      $this->getLogger('samlauth')->critical($message);
+      drupal_set_message($message, 'error');
       return new RedirectResponse('/');
     }
 
