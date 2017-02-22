@@ -1,7 +1,10 @@
 services:
+  logger.channel.samlauth:
+    parent: logger.channel_base
+    arguments: ['samlauth']
   samlauth.saml:
     class: Drupal\samlauth\SamlService
-    arguments: [ '@externalauth.externalauth', '@config.factory', '@entity_type.manager', '@logger.channel.externalauth' ]
+    arguments: [ '@externalauth.externalauth', '@config.factory', '@entity_type.manager', '@logger.channel.samlauth' ]
 #  samlauth.event_subscriber:
 #    class: Drupal\samlauth\EventSubscriber\SamlauthEventSubscriber
 #    arguments: ['@config.factory', '@logger.channel.externalauth']
