@@ -75,11 +75,33 @@ class SamlauthConfigureForm extends ConfigFormBase {
       '#default_value' => $config->get('sp_name_id_format'),
     );
 
+    $cert_folder = $config->get('sp_cert_folder');
+    $sp_x509_certificate = $config->get('sp_x509_certificate');
+    $sp_private_key = $config->get('sp_private_key');
+
+    $form['service_provider']['sp_cert_type'] = array(
+      '#type' => 'select',
+      '#title' => $this->t('Type of configuration to save for the certificates'),
+      '#required' => TRUE,
+      '#options' => [
+        'folder' => $this->t('Folder name'),
+        'fields' => $this->t('Cert/key value'),
+      ],
+      // Prefer folder over certs, like SamlService::reformatConfig(), but if
+      // both are empty then default to folder here.
+      '#default_value' => $cert_folder || (!$sp_x509_certificate && !$sp_private_key) ? 'folder' : 'fields',
+    );
+
     $form['service_provider']['sp_x509_certificate'] = array(
       '#type' => 'textarea',
       '#title' => $this->t('x509 Certificate'),
       '#description' => $this->t('Public x509 certificate of the SP. No line breaks or BEGIN CERTIFICATE or END CERTIFICATE lines.'),
       '#default_value' => $config->get('sp_x509_certificate'),
+      '#states' => array(
+        'visible' => array(
+          array(':input[name="sp_cert_type"]' => array('value' => 'fields')),
+        ),
+      ),
     );
 
     $form['service_provider']['sp_private_key'] = array(
@@ -87,6 +109,23 @@ class SamlauthConfigureForm extends ConfigFormBase {
       '#title' => $this->t('Private Key'),
       '#description' => $this->t('Private key for SP. No line breaks or BEGIN CERTIFICATE or END CERTIFICATE lines.'),
       '#default_value' => $config->get('sp_private_key'),
+      '#states' => array(
+        'visible' => array(
+          array(':input[name="sp_cert_type"]' => array('value' => 'fields')),
+        ),
+      ),
+    );
+
+    $form['service_provider']['sp_cert_folder'] = array(
+      '#type' => 'textfield',
+      '#title' => $this->t('Certificate folder'),
+      '#description' => $this->t('Set the path to the folder containing a /certs subfolder and the /certs/sp.key (private key) and /certs/sp.crt (public cert) files. The names of the subfolder and files are mandated by the external SAML Toolkit library.'),
+      '#default_value' => $cert_folder,
+      '#states' => array(
+        'visible' => array(
+          array(':input[name="sp_cert_type"]' => array('value' => 'folder')),
+        ),
+      ),
     );
 
     $form['identity_provider'] = array(
@@ -133,7 +172,7 @@ class SamlauthConfigureForm extends ConfigFormBase {
     $form['identity_provider']['idp_x509_certificate'] = array(
       '#type' => 'textarea',
       '#title' => $this->t('x509 Certificate'),
-      '#description' => $this->t('Public x509 certificate of the IdP'),
+      '#description' => $this->t('Public x509 certificate of the IdP. The external SAML Toolkit library does not allow configuring this as a separate file.'),
       '#default_value' => $config->get('idp_x509_certificate'),
     );
 
@@ -237,6 +276,19 @@ class SamlauthConfigureForm extends ConfigFormBase {
   public function validateForm(array &$form, FormStateInterface $form_state) {
     parent::validateForm($form, $form_state);
     // @TODO: Validate cert. Might be able to just openssl_x509_parse().
+
+    // Validate certs folder. Don't allow the user to save an empty folder; if
+    // they want to save incomplete config data, they can switch to 'fields'.
+    $sp_cert_type = $form_state->getValue('sp_cert_type');
+    $sp_cert_folder = $this->fixFolderPath($form_state->getValue('sp_cert_folder'));
+    if ($sp_cert_type == 'folder') {
+      if (empty($sp_cert_folder)) {
+        $form_state->setErrorByName('sp_cert_folder', $this->t('@name field is required.', array('@name' => $form['service_provider']['sp_cert_folder']['#title'])));
+      }
+      elseif (!file_exists($sp_cert_folder . '/certs/sp.key') || !file_exists($sp_cert_folder . '/certs/sp.crt')) {
+        $form_state->setErrorByName('sp_cert_folder', $this->t('The Certificate folder does not contain the required certs/sp.key or certs/sp.crt files.'));
+      }
+    }
   }
 
   /**
@@ -245,12 +297,28 @@ class SamlauthConfigureForm extends ConfigFormBase {
   public function submitForm(array &$form, FormStateInterface $form_state) {
     parent::submitForm($form, $form_state);
 
+    // Only store variables related to the sp_cert_type value. (If the user
+    // switched from fields to folder, the cert/key values always get cleared
+    // so no unused security sensitive data gets saved in the database.)
+    $sp_cert_type = $form_state->getValue('sp_cert_type');
+    $sp_x509_certificate = '';
+    $sp_private_key = '';
+    $sp_cert_folder = '';
+    if ($sp_cert_type == 'folder') {
+      $sp_cert_folder = $this->fixFolderPath($form_state->getValue('sp_cert_folder'));
+    }
+    else {
+      $sp_x509_certificate = $form_state->getValue('sp_x509_certificate');
+      $sp_private_key = $form_state->getValue('sp_private_key');
+    }
+
     $this->config('samlauth.authentication')
       ->set('drupal_saml_login', $form_state->getValue('drupal_saml_login'))
       ->set('sp_entity_id', $form_state->getValue('sp_entity_id'))
       ->set('sp_name_id_format', $form_state->getValue('sp_name_id_format'))
-      ->set('sp_x509_certificate', $form_state->getValue('sp_x509_certificate'))
-      ->set('sp_private_key', $form_state->getValue('sp_private_key'))
+      ->set('sp_x509_certificate', $sp_x509_certificate)
+      ->set('sp_private_key', $sp_private_key)
+      ->set('sp_cert_folder', $sp_cert_folder)
       ->set('idp_entity_id', $form_state->getValue('idp_entity_id'))
       ->set('idp_single_sign_on_service', $form_state->getValue('idp_single_sign_on_service'))
       ->set('idp_single_log_out_service', $form_state->getValue('idp_single_log_out_service'))
@@ -268,4 +336,15 @@ class SamlauthConfigureForm extends ConfigFormBase {
       ->set('security_request_authn_context', $form_state->getValue('security_request_authn_context'))
       ->save();
   }
+
+  /**
+   * Remove trailing slash from a folder name, to unify config values.
+   */
+  private function fixFolderPath($path) {
+    if ($path) {
+      $path =  rtrim($path, '/');
+    }
+    return $path;
+  }
+
 }

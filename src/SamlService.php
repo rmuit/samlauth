@@ -318,6 +318,22 @@ class SamlService {
    *   The library configuration array.
    */
   protected static function reformatConfig(ImmutableConfig $config) {
+    // Check if we want to load the certificates from a folder. Either folder or
+    // cert+key settings should be defined. If both are defined, "folder" is the
+    // preferred method and we ignore cert/path values; we don't do more
+    // complicated validation like checking whether the cert/key files exist.
+    $sp_cert = '';
+    $sp_key = '';
+    $cert_folder = $config->get('sp_cert_folder');
+    if ($cert_folder) {
+      // Set the folder so the Simple SAML toolkit knows where to look.
+      define('ONELOGIN_CUSTOMPATH', "$cert_folder/");
+    }
+    else {
+      $sp_cert = $config->get('sp_x509_certificate');
+      $sp_key = $config->get('sp_private_key');
+    }
+
     return array(
       'sp' => array(
         'entityId' => $config->get('sp_entity_id'),
@@ -328,8 +344,8 @@ class SamlService {
           'url' => Url::fromRoute('samlauth.saml_controller_sls', array(), array('absolute' => TRUE))->toString(),
         ),
         'NameIDFormat' => $config->get('sp_name_id_format'),
-        'x509cert' => $config->get('sp_x509_certificate'),
-        'privateKey' => $config->get('sp_private_key'),
+        'x509cert' => $sp_cert,
+        'privateKey' => $sp_key,
       ),
       'idp' => array (
         'entityId' => $config->get('idp_entity_id'),
