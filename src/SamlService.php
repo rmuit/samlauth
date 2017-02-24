@@ -389,11 +389,11 @@ class SamlService {
         'x509cert' => $config->get('idp_x509_certificate'),
       ),
       'security' => array(
-        'authnRequestsSigned' => $config->get('security_authn_requests_sign') ? TRUE : FALSE,
-        'wantMessagesSigned' => $config->get('security_messages_sign') ? TRUE : FALSE,
-        'wantNameIdSigned' => $config->get('security_name_id_sign') ? TRUE : FALSE,
-        'requestedAuthnContext' => $config->get('security_request_authn_context') ? TRUE : FALSE,
+        'authnRequestsSigned' => (bool) $config->get('security_authn_requests_sign'),
+        'wantMessagesSigned' => (bool) $config->get('security_messages_sign'),
+        'requestedAuthnContext' => (bool) $config->get('security_request_authn_context'),
       ),
+      'strict' => (bool) $config->get('strict'),
     );
   }
 

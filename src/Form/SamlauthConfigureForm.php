@@ -249,22 +249,30 @@ class SamlauthConfigureForm extends ConfigFormBase {
       '#type' => 'fieldset',
     );
 
+    $form['security']['strict'] = array(
+      '#type' => 'checkbox',
+      '#title' => $this->t('Strict mode'),
+      '#description' => $this->t('In strict mode, any validation failures or unsigned SAML messages which are requested to be signed (according to your settings) will cause the SAML conversation to be terminated. In production environments, this <em>must</em> be set.'),
+      '#default_value' => $config->get('strict'),
+    );
+
     $form['security']['security_authn_requests_sign'] = array(
       '#type' => 'checkbox',
-      '#title' => $this->t('Request signed authn requests'),
+      '#title' => $this->t('Sign authentication requests'),
+      '#description' => $this->t('Requests sent to the Single Sign-On Service of the IDP will include a signature.'),
       '#default_value' => $config->get('security_authn_requests_sign'),
     );
 
     $form['security']['security_messages_sign'] = array(
       '#type' => 'checkbox',
       '#title' => $this->t('Request messages to be signed'),
+      '#description' => $this->t('Response messages from the IDP are expected to be signed.'),
       '#default_value' => $config->get('security_messages_sign'),
-    );
-
-    $form['security']['security_name_id_sign'] = array(
-      '#type' => 'checkbox',
-      '#title' => $this->t('Request signed NameID'),
-      '#default_value' => $config->get('security_name_id_sign'),
+      '#states' => array(
+        'disabled' => array(
+          ':input[name="strict"]' => array('checked' => FALSE),
+        ),
+      ),
     );
 
     $form['security']['security_request_authn_context'] = array(
@@ -339,8 +347,8 @@ class SamlauthConfigureForm extends ConfigFormBase {
       ->set('user_mail_attribute', $form_state->getValue('user_mail_attribute'))
       ->set('security_authn_requests_sign', $form_state->getValue('security_authn_requests_sign'))
       ->set('security_messages_sign', $form_state->getValue('security_messages_sign'))
-      ->set('security_name_id_sign', $form_state->getValue('security_name_id_sign'))
       ->set('security_request_authn_context', $form_state->getValue('security_request_authn_context'))
+      ->set('strict', $form_state->getValue('strict'))
       ->save();
   }
 

@@ -16,6 +16,5 @@ sp_name_id_format: 'urn:oasis:names:tc:SAML:2.0:nameid-format:transient'
 map_users: 0
 security_authn_requests_sign: 0
 security_messages_sign: null
-security_name_id_sign: 0
 security_request_authn_context: 1
-
+strict: 1
