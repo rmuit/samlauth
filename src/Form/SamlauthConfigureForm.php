@@ -1,10 +1,5 @@
 <?php
 
-/**
- * @file
- * Contains Drupal\samlauth\Form\SamlauthConfigureForm.
- */
-
 namespace Drupal\samlauth\Form;
 
 use Drupal\Core\Form\ConfigFormBase;
@@ -12,9 +7,7 @@ use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\Url;
 
 /**
- * Class SamlauthConfigureForm.
- *
- * @package Drupal\samlauth\Form
+ * Provides a configuration form for samlauth module settings and IDP/SP info.
  */
 class SamlauthConfigureForm extends ConfigFormBase {
 

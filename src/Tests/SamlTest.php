@@ -1,11 +1,7 @@
 <?php
 
-/**
- * @file
- * Simpletests for samlauth functionality.
- */
-
 namespace Drupal\samlauth\Tests;
+
 use Drupal\Core\Url;
 use Drupal\simpletest\WebTestBase;
 use Drupal\Component\Serialization\Yaml;

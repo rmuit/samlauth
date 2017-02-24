@@ -1,10 +1,5 @@
 <?php
 
-/**
- * @file
- * Contains Drupal\samlauth\SamlService.
- */
-
 namespace Drupal\samlauth;
 
 use Drupal\Core\Config\ConfigFactoryInterface;
@@ -20,9 +15,7 @@ use OneLogin_Saml2_Error;
 use Psr\Log\LoggerInterface;
 
 /**
- * Class SamlService.
- *
- * @package Drupal\samlauth
+ * Governs communication between the SAML toolkit and the IDP / login behavior.
  */
 class SamlService {
 

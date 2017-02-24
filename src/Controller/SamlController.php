@@ -1,10 +1,5 @@
 <?php
 
-/**
- * @file
- * Contains Drupal\samlauth\Controller\SamlController.
- */
-
 namespace Drupal\samlauth\Controller;
 
 use Exception;
@@ -15,9 +10,7 @@ use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
- * Class SamlController.
- *
- * @package Drupal\samlauth\Controller
+ * Returns responses for samlauth module routes.
  */
 class SamlController extends ControllerBase {
 
