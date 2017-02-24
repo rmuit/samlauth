@@ -225,6 +225,7 @@ class SamlauthConfigureForm extends ConfigFormBase {
         'invisible' => array(
           ':input[name="map_users"]' => array('checked' => FALSE),
           ':input[name="create_users"]' => array('checked' => FALSE),
+          ':input[name="sync_name"]' => array('checked' => FALSE),
         ),
       ),
     );
@@ -238,6 +239,7 @@ class SamlauthConfigureForm extends ConfigFormBase {
         'invisible' => array(
           ':input[name="map_users"]' => array('checked' => FALSE),
           ':input[name="create_users"]' => array('checked' => FALSE),
+          ':input[name="sync_mail"]' => array('checked' => FALSE),
         ),
       ),
     );
