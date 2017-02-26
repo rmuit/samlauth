@@ -12,10 +12,10 @@ use Drupal\samlauth\Event\SamlauthUserLinkEvent;
 use Drupal\samlauth\Event\SamlauthUserSyncEvent;
 use Drupal\user\UserInterface;
 use Exception;
-use InvalidArgumentException;
 use OneLogin_Saml2_Auth;
 use OneLogin_Saml2_Error;
 use Psr\Log\LoggerInterface;
+use RuntimeException;
 use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 
 /**
@@ -85,7 +85,6 @@ class SamlService {
     $this->entityTypeManager = $entity_type_manager;
     $this->logger = $logger;
     $this->eventDispatcher = $event_dispatcher;
-    $this->samlAuth = new OneLogin_Saml2_Auth(static::reformatConfig($this->config));
   }
 
   /**
@@ -112,10 +111,10 @@ class SamlService {
    * Show metadata about the local sp. Use this to configure your saml2 IDP
    *
    * @return mixed xml string representing metadata
-   * @throws InvalidArgumentException
+   * @throws OneLogin_Saml2_Error
    */
   public function getMetadata() {
-    $settings = $this->samlAuth->getSettings();
+    $settings = $this->getSamlAuth()->getSettings();
     $metadata = $settings->getSPMetadata();
     $errors = $settings->validateMetadata($metadata);
 
@@ -123,10 +122,7 @@ class SamlService {
       return $metadata;
     }
     else {
-      throw new InvalidArgumentException(
-        'Invalid SP metadata: ' . implode(', ', $errors),
-        OneLogin_Saml2_Error::METADATA_SP_INVALID
-      );
+      throw new OneLogin_Saml2_Error('Invalid SP metadata: ' . implode(', ', $errors), OneLogin_Saml2_Error::METADATA_SP_INVALID);
     }
   }
 
@@ -139,10 +135,10 @@ class SamlService {
    */
   public function login($return_to = null) {
     if (!$return_to) {
-      $sp_config = $this->samlAuth->getSettings()->getSPData();
+      $sp_config = $this->getSamlAuth()->getSettings()->getSPData();
       $return_to = $sp_config['assertionConsumerService']['url'];
     }
-    $this->samlAuth->login($return_to);
+    $this->getSamlAuth()->login($return_to);
   }
 
   /**
@@ -154,11 +150,11 @@ class SamlService {
    */
   public function logout($return_to = null) {
     if (!$return_to) {
-      $sp_config = $this->samlAuth->getSettings()->getSPData();
+      $sp_config = $this->getSamlAuth()->getSettings()->getSPData();
       $return_to = $sp_config['singleLogoutService']['url'];
     }
     user_logout();
-    $this->samlAuth->logout($return_to, array('referrer' => $return_to));
+    $this->getSamlAuth()->logout($return_to, array('referrer' => $return_to));
   }
 
   /**
@@ -174,17 +170,17 @@ class SamlService {
     // This call can either set an error condition or throw a
     // \OneLogin_Saml2_Error exception, depending on whether or not we are
     // processing a POST request. Don't catch the exception.
-    $this->samlAuth->processResponse();
+    $this->getSamlAuth()->processResponse();
     // Now look if there were any errors and also throw.
-    $errors = $this->samlAuth->getErrors();
+    $errors = $this->getSamlAuth()->getErrors();
     if (!empty($errors)) {
       // We have one or multiple error types / short descriptions, and one
       // 'reason' for the last error.
-      throw new Exception('Error(s) encountered during processing of ACS response. Type(s): ' . implode(', ', array_unique($errors)) . '; reason given for last error: ' . $this->samlAuth->getLastErrorReason());
+      throw new RuntimeException('Error(s) encountered during processing of ACS response. Type(s): ' . implode(', ', array_unique($errors)) . '; reason given for last error: ' . $this->getSamlAuth()->getLastErrorReason());
     }
 
     if (!$this->isAuthenticated()) {
-      throw new Exception('Could not authenticate.');
+      throw new RuntimeException('Could not authenticate.');
     }
 
     $unique_id = $this->getAttributeByConfig('unique_id_attribute');
@@ -255,11 +251,11 @@ class SamlService {
         $this->externalAuth->userLoginFinalize($account, $unique_id, 'samlauth');
       }
       else {
-        throw new Exception('No existing user account matches the SAML ID provided. This authentication service is not configured to create new accounts.');
+        throw new RuntimeException('No existing user account matches the SAML ID provided. This authentication service is not configured to create new accounts.');
       }
     }
     elseif ($account->isBlocked()) {
-      throw new Exception('Requested account is blocked.');
+      throw new RuntimeException('Requested account is blocked.');
     }
     else {
       // Synchronize the user account with SAML attributes if needed.
@@ -305,7 +301,7 @@ class SamlService {
    *   An array with all returned SAML attributes..
    */
   public function getAttributes() {
-    return $this->samlAuth->getAttributes();
+    return $this->getSamlAuth()->getAttributes();
   }
 
   /**
@@ -325,7 +321,7 @@ class SamlService {
   public function getAttributeByConfig($config_key) {
     $attribute_name = $this->config->get($config_key);
     if ($attribute_name) {
-      $attribute = $this->samlAuth->getAttribute($attribute_name);
+      $attribute = $this->getSamlAuth()->getAttribute($attribute_name);
       if (!empty($attribute[0])) {
         return $attribute[0];
       }
@@ -336,7 +332,18 @@ class SamlService {
    * @return bool if a valid user was fetched from the saml assertion this request.
    */
   protected function isAuthenticated() {
-    return $this->samlAuth->isAuthenticated();
+    return $this->getSamlAuth()->isAuthenticated();
+  }
+
+  /**
+   * Returns an initialized Auth class from the SAML Toolkit.
+   */
+  protected function getSamlAuth() {
+    if (!isset($this->samlAuth)) {
+      $this->samlAuth = new OneLogin_Saml2_Auth(static::reformatConfig($this->config));
+    }
+
+    return $this->samlAuth;
   }
 
   /**

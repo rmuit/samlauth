@@ -5,6 +5,8 @@ namespace Drupal\samlauth\Controller;
 use Exception;
 use Drupal\samlauth\SamlService;
 use Drupal\Core\Controller\ControllerBase;
+use Drupal\Core\Url;
+use Drupal\Core\Utility\Error;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Response;
@@ -49,7 +51,16 @@ class SamlController extends ControllerBase {
    * This should redirect to the Login service on the IDP and then to our ACS.
    */
   public function login() {
-    $this->saml->login();
+    try {
+      $this->saml->login();
+      // We don't return here unless something is fundamentally wrong inside the
+      // SAML Toolkit sources.
+      throw new Exception('Not redirected to SAML IDP');
+    }
+    catch (Exception $e) {
+      $this->handleException($e, 'initiating SAML login');
+    }
+    return new RedirectResponse(Url::fromRoute('<front>', [], ['absolute' => TRUE])->toString());
   }
 
   /**
@@ -58,7 +69,16 @@ class SamlController extends ControllerBase {
    * This should redirect to the SLS service on the IDP and then to our SLS.
    */
   public function logout() {
-    $this->saml->logout();
+    try {
+      $this->saml->logout();
+      // We don't return here unless something is fundamentally wrong inside the
+      // SAML Toolkit sources.
+      throw new Exception('Not redirected to SAML IDP');
+    }
+    catch (Exception $e) {
+      $this->handleException($e, 'initiating SAML logout');
+    }
+    return new RedirectResponse(Url::fromRoute('<front>', [], ['absolute' => TRUE])->toString());
   }
 
   /**
@@ -67,7 +87,14 @@ class SamlController extends ControllerBase {
    * @return \Symfony\Component\HttpFoundation\Response
    */
   public function metadata() {
-    $metadata = $this->saml->getMetadata();
+    try {
+      $metadata = $this->saml->getMetadata();
+    }
+    catch (Exception $e) {
+      $this->handleException($e, 'processing SAML SP metadata');
+      return new RedirectResponse(Url::fromRoute('<front>', [], ['absolute' => TRUE])->toString());
+    }
+
     $response = new Response($metadata, 200);
     $response->headers->set('Content-Type', 'text/xml');
     return $response;
@@ -84,16 +111,14 @@ class SamlController extends ControllerBase {
   public function acs() {
     try {
       $this->saml->acs();
+      $route = $this->saml->getPostLoginDestination();
+      $url = Url::fromRoute($route, [], ['absolute' => TRUE])->toString();
     }
     catch (Exception $e) {
-      $message = 'While processing SAML authentication response: ' . $e->getMessage();
-      $this->getLogger('samlauth')->critical($message);
-      drupal_set_message($message, 'error');
-      return new RedirectResponse('/');
+      $this->handleException($e, 'processing SAML authentication response');
+      $url = Url::fromRoute('<front>', [], ['absolute' => TRUE])->toString();
     }
 
-    $route = $this->saml->getPostLoginDestination();
-    $url = \Drupal::urlGenerator()->generateFromRoute($route);
     return new RedirectResponse($url);
   }
 
@@ -114,10 +139,16 @@ class SamlController extends ControllerBase {
    *   this function whether we should still log out.
    */
   public function sls() {
-    $this->saml->sls();
+    try {
+      $this->saml->sls();
+      $route = $this->saml->getPostLogoutDestination();
+      $url = Url::fromRoute($route, [], ['absolute' => TRUE])->toString();
+    }
+    catch (Exception $e) {
+      $this->handleException($e, 'processing SAML aingle-logout response');
+      $url = Url::fromRoute('<front>', [], ['absolute' => TRUE])->toString();
+    }
 
-    $route = $this->saml->getPostLogoutDestination();
-    $url = \Drupal::urlGenerator()->generateFromRoute($route);
     return new RedirectResponse($url);
   }
 
@@ -131,4 +162,26 @@ class SamlController extends ControllerBase {
     return new RedirectResponse($url);
   }
 
+  /**
+   * Displays error message and logs full exception.
+   *
+   * @param $exception
+   *   The exception thrown.
+   * @param string $while
+   *   A description of when the error was encountered.
+   */
+  protected function handleException($exception, $while = '') {
+    if ($while) {
+      $while = " $while";
+    }
+    // We use the same format for logging as Drupal's ExceptionLoggingSubscriber
+    // except we also specify where the error was enocuntered. (The options are
+    // limited, so we make this part of the message, not a context parameter.)
+    $error = Error::decodeException($exception);
+    unset($error['severity_level']);
+    $this->getLogger('samlauth')->critical("%type encountered while $while: @message in %function (line %line of %file).", $error);
+    // Don't expose the error to prevent information leakage; the user probably
+    // can't do much with it anyway. But hint that more details are available.
+    drupal_set_message("Error $while; details have been logged.", 'error');
+  }
 }
