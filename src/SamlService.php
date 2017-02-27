@@ -88,26 +88,6 @@ class SamlService {
   }
 
   /**
-   * Returns the route name that users will be redirected to after authenticating.
-   *
-   * @return string
-   * @todo make this configurable
-   */
-  public function getPostLoginDestination() {
-    return 'user.page';
-  }
-
-  /**
-   * Returns the route name that users will be redirected to after logging out.
-   *
-   * @return string
-   * @todo make this configurable
-   */
-  public function getPostLogoutDestination() {
-    return '<front>';
-  }
-
-  /**
    * Show metadata about the local sp. Use this to configure your saml2 IDP
    *
    * @return mixed xml string representing metadata
@@ -131,13 +111,9 @@ class SamlService {
    *
    * @param string $return_to
    *   (optional) The path to return the user to after successful processing by
-   *   the IDP. The SP's AssertionConsumerService path is used by default.
+   *   the IDP.
    */
   public function login($return_to = null) {
-    if (!$return_to) {
-      $sp_config = $this->getSamlAuth()->getSettings()->getSPData();
-      $return_to = $sp_config['assertionConsumerService']['url'];
-    }
     $this->getSamlAuth()->login($return_to);
   }
 
@@ -146,13 +122,9 @@ class SamlService {
    *
    * @param null $return_to
    *   (optional) The path to return the user to after successful processing by
-   *   the IDP. The SP's SingleLogoutService path is used by default.
+   *   the IDP.
    */
   public function logout($return_to = null) {
-    if (!$return_to) {
-      $sp_config = $this->getSamlAuth()->getSettings()->getSPData();
-      $return_to = $sp_config['singleLogoutService']['url'];
-    }
     user_logout();
     $this->getSamlAuth()->logout($return_to, array('referrer' => $return_to));
   }
