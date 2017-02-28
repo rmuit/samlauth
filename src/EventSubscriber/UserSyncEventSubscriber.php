@@ -126,25 +126,23 @@ class UserSyncEventSubscriber implements EventSubscriberInterface {
         // accounts this can happen if the 'map existing users' setting is off.
         if (!$fatal_errors) {
           $account_search = $this->entityTypeManager->getStorage('user')->loadByProperties(array('name' => $name));
-          if ($existing_account = reset($account_search)) {
-            if ($account->id() == $existing_account->id()) {
-
-              $account->setUsername($name);
-              $event->markAccountChanged();
+          $existing_account = reset($account_search);
+          if (!$existing_account || $account->id() == $existing_account->id()) {
+            $account->setUsername($name);
+            $event->markAccountChanged();
+          }
+          else {
+            $error = 'An account with the username @username already exists.';
+            if ($account->isNew()) {
+              $fatal_errors[] = t($error, ['@username' => $name]);
             }
             else {
-              $error = 'An account with the username @username already exists.';
-              if ($account->isNew()) {
-                $fatal_errors[] = t($error, ['@username' => $name]);
-              }
-              else {
-                // We continue and keep the old name. A DSM should be OK here
-                // since login only happens interactively. (And we're ignoring
-                // the law of dependency injection for this.)
-                $error = "Error updating user name from SAML attribute: $error";
-                $this->logger->error($error, ['@username' => $name]);
-                drupal_set_message(t($error, ['@username' => $name]), 'error');
-              }
+              // We continue and keep the old name. A DSM should be OK here
+              // since login only happens interactively. (And we're ignoring
+              // the law of dependency injection for this.)
+              $error = "Error updating user name from SAML attribute: $error";
+              $this->logger->error($error, ['@username' => $name]);
+              drupal_set_message(t($error, ['@username' => $name]), 'error');
             }
           }
         }
