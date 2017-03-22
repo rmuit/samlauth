@@ -5,9 +5,13 @@ namespace Drupal\samlauth\Controller;
 use Exception;
 use Drupal\samlauth\SamlService;
 use Drupal\Component\Utility\UrlHelper;
+use Drupal\Core\Config\ConfigFactoryInterface;
 use Drupal\Core\Controller\ControllerBase;
+use Drupal\Core\Path\PathValidatorInterface;
+use Drupal\Core\Routing\TrustedRedirectResponse;
 use Drupal\Core\Url;
 use Drupal\Core\Utility\Error;
+use Drupal\Core\Utility\Token;
 use OneLogin_Saml2_Utils;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 use Symfony\Component\HttpFoundation\RedirectResponse;
@@ -34,16 +38,46 @@ class SamlController extends ControllerBase {
   protected $requestStack;
 
   /**
+   * A configuration object containing samlauth settings.
+   *
+   * @var \Drupal\Core\Config\ImmutableConfig
+   */
+  protected $config;
+
+  /**
+   * The PathValidator service.
+   *
+   * @var \Drupal\Core\Path\PathValidatorInterface
+   */
+  protected $pathValidator;
+
+  /**
+   * The token service.
+   *
+   * @var \Drupal\Core\Utility\Token
+   */
+  protected $token;
+
+  /**
    * Constructor for Drupal\samlauth\Controller\SamlController.
    *
    * @param \Drupal\samlauth\SamlService $saml
    *   The samlauth SAML service.
    * @param \Symfony\Component\HttpFoundation\RequestStack $request_stack
    *   The request stack.
+   * @param \Drupal\Core\Config\ConfigFactoryInterface $config_factory
+   *   The config factory.
+   * @param \Drupal\Core\Path\PathValidatorInterface $path_validator
+   *   The PathValidator service.
+   * @param \Drupal\Core\Utility\Token $token
+   *   The token service.
    */
-  public function __construct(SamlService $saml, RequestStack $request_stack) {
+  public function __construct(SamlService $saml, RequestStack $request_stack, ConfigFactoryInterface $config_factory, PathValidatorInterface $path_validator, Token $token) {
     $this->saml = $saml;
     $this->requestStack = $request_stack;
+    $this->config = $config_factory->get('samlauth.authentication');
+    $this->pathValidator = $path_validator;
+    $this->token = $token;
   }
 
   /**
@@ -56,7 +90,10 @@ class SamlController extends ControllerBase {
   public static function create(ContainerInterface $container) {
     return new static(
       $container->get('samlauth.saml'),
-      $container->get('request_stack')
+      $container->get('request_stack'),
+      $container->get('config.factory'),
+      $container->get('path.validator'),
+      $container->get('token')
     );
   }
 
@@ -219,7 +256,6 @@ class SamlController extends ControllerBase {
    *   The URL to redirect to.
    */
   protected function getRedirectUrlAfterProcessing($logged_in = FALSE) {
-    $url = '';
     if (isset($_REQUEST['RelayState'])) {
       // We should be able to trust the RelayState parameter at this point
       // because the response from the IDP was verified. Only validate general
@@ -234,13 +270,29 @@ class SamlController extends ControllerBase {
       }
     }
 
-    if (!$url) {
-      // If no url was specified, we have a hardcoded route to redirect to.
-      $route = $logged_in ? 'user.page' : '<front>';
-      $url = Url::fromRoute($route, [], ['absolute' => TRUE])->toString();
+    if (empty($url)) {
+      // If no url was specified, we check if it was configured.
+      $url = $this->config->get($logged_in ? 'login_redirect_url' : 'logout_redirect_url');
     }
 
-    return $url;
+    if ($url) {
+      $url = $this->token->replace($url);
+      // We don't check access here. If a URL was explicitly specified, we
+      // prefer returning a 403 over silently redirecting somewhere else.
+      $url_object = $this->pathValidator->getUrlIfValidWithoutAccessCheck($url);
+      if (empty($url_object)) {
+        $type = $logged_in ? 'Login' : 'Logout';
+        $this->getLogger('samlauth')->warning("The $type Redirect URL is not a valid path; falling back to default.");
+      }
+    }
+
+    if (empty($url_object)) {
+      // If no url was configured, fall back to a hardcoded route.
+      $url_object = Url::fromRoute($logged_in ? 'user.page' : '<front>');
+    }
+
+    // @todo fix return value (see #2863340)
+    return $url_object->toString();
   }
 
   /**
