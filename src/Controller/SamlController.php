@@ -158,7 +158,7 @@ class SamlController extends ControllerBase {
    * This is usually the second step in the authentication flow; the Login
    * service on the IDP should redirect (or: execute a POST request to) here.
    *
-   * @return \Symfony\Component\HttpFoundation\RedirectResponse
+   * @return \Drupal\Core\Routing\TrustedRedirectResponse
    */
   public function acs() {
     try {
@@ -167,10 +167,13 @@ class SamlController extends ControllerBase {
     }
     catch (Exception $e) {
       $this->handleException($e, 'processing SAML authentication response');
-      $url = Url::fromRoute('<front>', [], ['absolute' => TRUE])->toString();
+      $url = Url::fromRoute('<front>');
     }
 
-    return new RedirectResponse($url);
+    $generated_url = $url->toString(TRUE);
+    $response = new TrustedRedirectResponse($generated_url->getGeneratedUrl());
+    $response->addCacheableDependency($generated_url);
+    return $response;
   }
 
   /**
@@ -179,7 +182,7 @@ class SamlController extends ControllerBase {
    * This is usually the second step in the logout flow; the SLS service on the
    * IDP should redirect here.
    *
-   * @return \Symfony\Component\HttpFoundation\RedirectResponse
+   * @return \Drupal\Core\Routing\TrustedRedirectResponse
    *
    * @todo we already called user_logout() at the start of the logout
    *   procedure i.e. at logout(). The route that leads here is only accessible
@@ -195,11 +198,14 @@ class SamlController extends ControllerBase {
       $url = $this->getRedirectUrlAfterProcessing();
     }
     catch (Exception $e) {
-      $this->handleException($e, 'processing SAML aingle-logout response');
-      $url = Url::fromRoute('<front>', [], ['absolute' => TRUE])->toString();
+      $this->handleException($e, 'processing SAML single-logout response');
+      $url = Url::fromRoute('<front>');
     }
 
-    return new RedirectResponse($url);
+    $generated_url = $url->toString(TRUE);
+    $response = new TrustedRedirectResponse($generated_url->getGeneratedUrl());
+    $response->addCacheableDependency($generated_url);
+    return $response;
   }
 
   /**
@@ -252,7 +258,7 @@ class SamlController extends ControllerBase {
    * @param bool $logged_in
    *   (optional) TRUE if an ACS request was just processed.
    *
-   * @return string|null
+   * @return \Drupal\Core\Url
    *   The URL to redirect to.
    */
   protected function getRedirectUrlAfterProcessing($logged_in = FALSE) {
@@ -291,8 +297,7 @@ class SamlController extends ControllerBase {
       $url_object = Url::fromRoute($logged_in ? 'user.page' : '<front>');
     }
 
-    // @todo fix return value (see #2863340)
-    return $url_object->toString();
+    return $url_object;
   }
 
   /**

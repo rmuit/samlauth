@@ -348,10 +348,10 @@ class SamlService {
       'sp' => array(
         'entityId' => $config->get('sp_entity_id'),
         'assertionConsumerService' => array(
-          'url' => Url::fromRoute('samlauth.saml_controller_acs', array(), array('absolute' => TRUE))->toString(),
+          'url' => Url::fromRoute('samlauth.saml_controller_acs', array(), array('absolute' => TRUE))->toString(TRUE)->getGeneratedUrl(),
         ),
         'singleLogoutService' => array(
-          'url' => Url::fromRoute('samlauth.saml_controller_sls', array(), array('absolute' => TRUE))->toString(),
+          'url' => Url::fromRoute('samlauth.saml_controller_sls', array(), array('absolute' => TRUE))->toString(TRUE)->getGeneratedUrl(),
         ),
         'NameIDFormat' => $config->get('sp_name_id_format'),
         'x509cert' => $sp_cert,
