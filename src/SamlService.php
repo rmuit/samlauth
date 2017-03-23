@@ -112,9 +112,13 @@ class SamlService {
    * @param string $return_to
    *   (optional) The path to return the user to after successful processing by
    *   the IDP.
+   *
+   * @return string
+   *   The URL of the single sign-on service to redirect to, including query
+   *   parameters.
    */
   public function login($return_to = null) {
-    $this->getSamlAuth()->login($return_to);
+    return $this->getSamlAuth()->login($return_to, [], FALSE, FALSE, TRUE);
   }
 
   /**
@@ -123,10 +127,14 @@ class SamlService {
    * @param null $return_to
    *   (optional) The path to return the user to after successful processing by
    *   the IDP.
+   *
+   * @return string
+   *   The URL of the single logout service to redirect to, including query
+   *   parameters.
    */
   public function logout($return_to = null) {
     user_logout();
-    $this->getSamlAuth()->logout($return_to, array('referrer' => $return_to));
+    return $this->getSamlAuth()->logout($return_to, [], NULL, NULL, TRUE);
   }
 
   /**
@@ -348,6 +356,7 @@ class SamlService {
       'sp' => array(
         'entityId' => $config->get('sp_entity_id'),
         'assertionConsumerService' => array(
+          // See SamlController::redirectResponseFromUrl() for details.
           'url' => Url::fromRoute('samlauth.saml_controller_acs', array(), array('absolute' => TRUE))->toString(TRUE)->getGeneratedUrl(),
         ),
         'singleLogoutService' => array(

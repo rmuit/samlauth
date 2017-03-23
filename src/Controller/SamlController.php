@@ -104,15 +104,14 @@ class SamlController extends ControllerBase {
    */
   public function login() {
     try {
-      $this->saml->login($this->getUrlFromDestination());
-      // We don't return here unless something is fundamentally wrong inside the
-      // SAML Toolkit sources.
-      throw new Exception('Not redirected to SAML IDP');
+      $url = $this->saml->login($this->getUrlFromDestination());
     }
     catch (Exception $e) {
       $this->handleException($e, 'initiating SAML login');
+      $url = Url::fromRoute('<front>');
     }
-    return new RedirectResponse(Url::fromRoute('<front>', [], ['absolute' => TRUE])->toString());
+
+    return $this->redirectResponseFromUrl($url);
   }
 
   /**
@@ -122,15 +121,14 @@ class SamlController extends ControllerBase {
    */
   public function logout() {
     try {
-      $this->saml->logout($this->getUrlFromDestination());
-      // We don't return here unless something is fundamentally wrong inside the
-      // SAML Toolkit sources.
-      throw new Exception('Not redirected to SAML IDP');
+      $url = $this->saml->logout($this->getUrlFromDestination());
     }
     catch (Exception $e) {
       $this->handleException($e, 'initiating SAML logout');
+      $url = Url::fromRoute('<front>');
     }
-    return new RedirectResponse(Url::fromRoute('<front>', [], ['absolute' => TRUE])->toString());
+
+    return $this->redirectResponseFromUrl($url);
   }
 
   /**
@@ -144,12 +142,10 @@ class SamlController extends ControllerBase {
     }
     catch (Exception $e) {
       $this->handleException($e, 'processing SAML SP metadata');
-      return new RedirectResponse(Url::fromRoute('<front>', [], ['absolute' => TRUE])->toString());
+      return $this->redirectResponseFromUrl(Url::fromRoute('<front>'));
     }
 
-    $response = new Response($metadata, 200);
-    $response->headers->set('Content-Type', 'text/xml');
-    return $response;
+    return new Response($metadata, 200, ['Content-Type' => 'text/xml']);
   }
 
   /**
@@ -170,10 +166,7 @@ class SamlController extends ControllerBase {
       $url = Url::fromRoute('<front>');
     }
 
-    $generated_url = $url->toString(TRUE);
-    $response = new TrustedRedirectResponse($generated_url->getGeneratedUrl());
-    $response->addCacheableDependency($generated_url);
-    return $response;
+    return $this->redirectResponseFromUrl($url);
   }
 
   /**
@@ -202,10 +195,7 @@ class SamlController extends ControllerBase {
       $url = Url::fromRoute('<front>');
     }
 
-    $generated_url = $url->toString(TRUE);
-    $response = new TrustedRedirectResponse($generated_url->getGeneratedUrl());
-    $response->addCacheableDependency($generated_url);
-    return $response;
+    return $this->redirectResponseFromUrl($url);
   }
 
   /**
@@ -214,8 +204,8 @@ class SamlController extends ControllerBase {
    * @return \Symfony\Component\HttpFoundation\RedirectResponse
    */
   public function changepw() {
-    $url = \Drupal::config('samlauth.authentication')->get('idp_change_password_service');
-    return new RedirectResponse($url);
+    $url = $this->config->get('idp_change_password_service');
+    return $this->redirectResponseFromUrl($url);
   }
 
   /**
@@ -270,7 +260,7 @@ class SamlController extends ControllerBase {
         $this->getLogger('samlauth')->error('Invalid RelayState parameter found in request: @relaystate', ['@relaystate' => $_REQUEST['RelayState']]);
       }
       // The SAML toolkit set a default RelayState to itself (saml/log(in|out))
-      // when starting the process; ignore this.
+      // when starting the process; ignore this value.
       elseif (strpos($_REQUEST['RelayState'], OneLogin_Saml2_Utils::getSelfURLhost() . '/saml/') !== 0) {
         $url = $_REQUEST['RelayState'];
       }
@@ -301,6 +291,39 @@ class SamlController extends ControllerBase {
   }
 
   /**
+   * Converts a URL to a response object that is suitable for this controller.
+   *
+   * @param string|\Drupal\Core\Url $url
+   *   A URL to redirect to, either as a string or a Drupal URL object. Strings
+   *   may only be used by callbacks that are configured in routing.yml os not
+   *   being cacheable. (Which, in our case, is most callbacks.)
+   *
+   * @return \Drupal\Core\Routing\TrustedRedirectResponse
+   *   A response object representing a redirect.
+   */
+  protected function redirectResponseFromUrl($url) {
+    if (is_object($url)) {
+      // If toString() is used without arguments, this influences requirements
+      // for passing cacheability metadata into the response object, which can
+      // lead to bugs (see #2630808 short description). We pass TRUE to get
+      // cacheability metadata passed back in a GeneratedUrl object instead.
+      $generated_url = $url->toString(TRUE);
+      $url = $generated_url->getGeneratedUrl();
+    }
+    // Also when having returned from the IDP, we might redirect to an external
+    // url (at least in theory), so we always return a TrustedRedirectResponse.
+    $response = new TrustedRedirectResponse($url);
+    if (isset($generated_url)) {
+      // We shouldn't have to add cacheability metadata to our response object
+      // when the route is configured to not cache responses in our routing.yml.
+      // Do it anyway to prevent future obscure bugs with new routes.
+      $response->addCacheableDependency($generated_url);
+    }
+
+    return $response;
+  }
+
+  /**
    * Displays error message and logs full exception.
    *
    * @param $exception
@@ -322,4 +345,5 @@ class SamlController extends ControllerBase {
     // can't do much with it anyway. But hint that more details are available.
     drupal_set_message("Error $while; details have been logged.", 'error');
   }
+
 }
