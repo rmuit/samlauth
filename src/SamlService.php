@@ -10,6 +10,7 @@ use Drupal\externalauth\ExternalAuth;
 use Drupal\samlauth\Event\SamlauthEvents;
 use Drupal\samlauth\Event\SamlauthUserLinkEvent;
 use Drupal\samlauth\Event\SamlauthUserSyncEvent;
+use Drupal\user\PrivateTempStoreFactory;
 use Drupal\user\UserInterface;
 use Exception;
 use OneLogin_Saml2_Auth;
@@ -66,6 +67,13 @@ class SamlService {
   protected $eventDispatcher;
 
   /**
+   * Private account session store.
+   *
+   * @var \Drupal\user\PrivateTempStore.
+   */
+  protected $privateTempStore;
+
+  /**
    * Constructor for Drupal\samlauth\SamlService.
    *
    * @param \Drupal\externalauth\ExternalAuth $external_auth
@@ -78,13 +86,16 @@ class SamlService {
    *   A logger instance.
    * @param \Symfony\Component\EventDispatcher\EventDispatcherInterface $event_dispatcher
    *   The event dispatcher.
+   * @param \Drupal\user\PrivateTempStoreFactory $temp_store_factory
+   *   A temp data store factory object.
    */
-  public function __construct(ExternalAuth $external_auth, ConfigFactoryInterface $config_factory, EntityTypeManagerInterface $entity_type_manager, LoggerInterface $logger, EventDispatcherInterface $event_dispatcher) {
+  public function __construct(ExternalAuth $external_auth, ConfigFactoryInterface $config_factory, EntityTypeManagerInterface $entity_type_manager, LoggerInterface $logger, EventDispatcherInterface $event_dispatcher, PrivateTempStoreFactory $temp_store_factory) {
     $this->externalAuth = $external_auth;
     $this->config = $config_factory->get('samlauth.authentication');
     $this->entityTypeManager = $entity_type_manager;
     $this->logger = $logger;
     $this->eventDispatcher = $event_dispatcher;
+    $this->privateTempStore = $temp_store_factory->get('samlauth');
   }
 
   /**
@@ -133,7 +144,8 @@ class SamlService {
    *   parameters.
    */
   public function logout($return_to = null) {
-    return $this->getSamlAuth()->logout($return_to, [], NULL, NULL, TRUE);
+    $session_index = $this->privateTempStore->get('session_index');
+    return $this->getSamlAuth()->logout($return_to, [], NULL, $session_index, TRUE);
   }
 
   /**
@@ -242,6 +254,16 @@ class SamlService {
 
       $this->externalAuth->userLoginFinalize($account, $unique_id, 'samlauth');
     }
+
+    // Set session index / expiration in local private storage.
+    $value = $this->samlAuth->getSessionIndex();
+    if (isset($value)) {
+      $this->privateTempStore->set('session_index', $value);
+    }
+    $value = $this->samlAuth->getSessionExpiration();
+    if (isset($value)) {
+      $this->privateTempStore->set('session_expiration', $value);
+    }
   }
 
   /**
@@ -267,6 +289,10 @@ class SamlService {
     // be something like IDP-initiated logout. Therefore we won't do further
     // processing.
     if (!$url) {
+      // Delete private stored session information.
+      foreach (['session_index', 'session_expiration'] as $key) {
+        $this->privateTempStore->delete($key);
+      }
       user_logout();
     }
 
