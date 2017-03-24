@@ -101,6 +101,7 @@ class SamlController extends ControllerBase {
    * Initiates a SAML2 authentication flow.
    *
    * This should redirect to the Login service on the IDP and then to our ACS.
+   * It does not actually log us in (yet).
    */
   public function login() {
     try {
@@ -118,6 +119,7 @@ class SamlController extends ControllerBase {
    * Initiate a SAML2 logout flow.
    *
    * This should redirect to the SLS service on the IDP and then to our SLS.
+   * It does not actually log us out (yet).
    */
   public function logout() {
     try {
@@ -176,19 +178,13 @@ class SamlController extends ControllerBase {
    * IDP should redirect here.
    *
    * @return \Drupal\Core\Routing\TrustedRedirectResponse
-   *
-   * @todo we already called user_logout() at the start of the logout
-   *   procedure i.e. at logout(). The route that leads here is only accessible
-   *   for authenticated user. So in a logout flow where the user starts at
-   *   /saml/logout, this will never be executed and the user gets an "Access
-   *   denied" message when returning to /saml/sls; this code is never executed.
-   *   We should probably change the access rights and do more checking inside
-   *   this function whether we should still log out.
    */
   public function sls() {
     try {
-      $this->saml->sls();
-      $url = $this->getRedirectUrlAfterProcessing();
+      $url = $this->saml->sls();
+      if (!$url) {
+        $url = $this->getRedirectUrlAfterProcessing();
+      }
     }
     catch (Exception $e) {
       $this->handleException($e, 'processing SAML single-logout response');

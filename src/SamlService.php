@@ -133,7 +133,6 @@ class SamlService {
    *   parameters.
    */
   public function logout($return_to = null) {
-    user_logout();
     return $this->getSamlAuth()->logout($return_to, [], NULL, NULL, TRUE);
   }
 
@@ -246,11 +245,32 @@ class SamlService {
   }
 
   /**
-   * Does processing for the Single Logout Service if necessary.
+   * Does processing for the Single Logout Service.
+   *
+   * @return null|string
+   *   Usually returns nothing. May return a URL to redirect to.
    */
   public function sls() {
-    // @todo change; see SamlController::sls().
-    user_logout();
+    // This call can either set an error condition or throw a
+    // \OneLogin_Saml2_Error exception, depending on whether or not we are
+    // processing a POST request. Don't catch the exception.
+    $url = $this->samlAuth->processSLO(FALSE, NULL, FALSE, NULL, TRUE);
+    // Now look if there were any errors and also throw.
+    $errors = $this->getSamlAuth()->getErrors();
+    if (!empty($errors)) {
+      // We have one or multiple error types / short descriptions, and one
+      // 'reason' for the last error.
+      throw new RuntimeException('Error(s) encountered during processing of SLS response. Type(s): ' . implode(', ', array_unique($errors)) . '; reason given for last error: ' . $this->getSamlAuth()->getLastErrorReason());
+    }
+
+    // Usually we don't get any URL returned. The case in which we do, seems to
+    // be something like IDP-initiated logout. Therefore we won't do further
+    // processing.
+    if (!$url) {
+      user_logout();
+    }
+
+    return $url;
   }
 
   /**
