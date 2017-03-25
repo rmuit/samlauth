@@ -111,7 +111,7 @@ class SamlController extends ControllerBase {
       $url = Url::fromRoute('<front>');
     }
 
-    return $this->redirectResponseFromUrl($url);
+    return $this->createRedirectResponse($url);
   }
 
   /**
@@ -128,7 +128,7 @@ class SamlController extends ControllerBase {
       $url = Url::fromRoute('<front>');
     }
 
-    return $this->redirectResponseFromUrl($url);
+    return $this->createRedirectResponse($url);
   }
 
   /**
@@ -142,7 +142,7 @@ class SamlController extends ControllerBase {
     }
     catch (Exception $e) {
       $this->handleException($e, 'processing SAML SP metadata');
-      return $this->redirectResponseFromUrl(Url::fromRoute('<front>'));
+      return $this->createRedirectResponse(Url::fromRoute('<front>'));
     }
 
     return new Response($metadata, 200, ['Content-Type' => 'text/xml']);
@@ -166,7 +166,7 @@ class SamlController extends ControllerBase {
       $url = Url::fromRoute('<front>');
     }
 
-    return $this->redirectResponseFromUrl($url);
+    return $this->createRedirectResponse($url);
   }
 
   /**
@@ -195,7 +195,7 @@ class SamlController extends ControllerBase {
       $url = Url::fromRoute('<front>');
     }
 
-    return $this->redirectResponseFromUrl($url);
+    return $this->createRedirectResponse($url);
   }
 
   /**
@@ -205,7 +205,7 @@ class SamlController extends ControllerBase {
    */
   public function changepw() {
     $url = $this->config->get('idp_change_password_service');
-    return $this->redirectResponseFromUrl($url);
+    return $this->createRedirectResponse($url);
   }
 
   /**
@@ -301,7 +301,7 @@ class SamlController extends ControllerBase {
    * @return \Drupal\Core\Routing\TrustedRedirectResponse
    *   A response object representing a redirect.
    */
-  protected function redirectResponseFromUrl($url) {
+  protected function createRedirectResponse($url) {
     if (is_object($url)) {
       // If toString() is used without arguments, this influences requirements
       // for passing cacheability metadata into the response object, which can
