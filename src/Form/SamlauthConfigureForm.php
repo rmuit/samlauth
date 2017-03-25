@@ -78,33 +78,53 @@ class SamlauthConfigureForm extends ConfigFormBase {
   public function buildForm(array $form, FormStateInterface $form_state) {
     $config = $this->config('samlauth.authentication');
 
-    $form['saml_requirements'] = array(
-      '#type' => 'fieldset',
-      '#title' => $this->t('SAML Requirements'),
-    );
-
-    $form['saml_requirements']['drupal_saml_login'] = array(
-      '#type' => 'checkbox',
-      '#title' => $this->t('Allow SAML users to login directly with Drupal'),
-      '#description' => $this->t('If this option is enabled, users that have a remote SAML ID will also be allowed to login through the normal Drupal process (without the intervention of the configured identity provider). Note that if Drupal login is hidden, this option will have no effect.'),
-      '#default_value' => $config->get('drupal_saml_login'),
-    );
-
     $form['saml_login_logout'] = array(
       '#type' => 'fieldset',
       '#title' => $this->t('Login / Logout'),
     );
 
+    // Show note for enabling "log in" or "log out" menu link item.
+    if (Url::fromRoute('entity.menu.edit_form', ['menu' => 'account'])->access()) {
+      $form['saml_login_logout']['menu_item'] = array(
+        '#type' => 'markup',
+        '#markup' => '<em>' . $this->t('Note: You <a href="@url">may want to enable</a> the "log in" / "log out" menu item and disable the original one.', array(
+            '@url' => Url::fromRoute('entity.menu.edit_form', ['menu' => 'account'])
+              ->toString()
+          )) . '</em>',
+      );
+    }
+
+    $form['saml_login_logout']['login_menu_item_title'] = array(
+      '#type' => 'textfield',
+      '#title' => $this->t('Login menu item title'),
+      '#description' => $this->t('The title of the SAML login link. Defaults to "Log in".'),
+      '#default_value' => $config->get('login_menu_item_title'),
+    );
+
+    $form['saml_login_logout']['logout_menu_item_title'] = array(
+      '#type' => 'textfield',
+      '#title' => $this->t('Logout menu item title'),
+      '#description' => $this->t('The title of the SAML logout link. Defaults to "Log out".'),
+      '#default_value' => $config->get('logout_menu_item_title'),
+    );
+
+    $form['saml_login_logout']['drupal_saml_login'] = array(
+      '#type' => 'checkbox',
+      '#title' => $this->t('Allow SAML users to log in directly'),
+      '#description' => $this->t('If this option is enabled, users that have a remote SAML ID will also be allowed to log in through the normal Drupal process (without the intervention of the configured identity provider). This option does not change anything to site layout (e.g. enabling menu links); you will need to do this yourself.'),
+      '#default_value' => $config->get('drupal_saml_login'),
+    );
+
     $form['saml_login_logout']['login_redirect_url'] = array(
       '#type' => 'textfield',
-      '#title' => $this->t('Login Redirect URL'),
+      '#title' => $this->t('Login redirect URL'),
       '#description' => $this->t("Define the default URL to redirect the user after login. Enter a internal path starting with a slash, or a absolute URL. Defaults to the logged-in user's account page."),
       '#default_value' => $config->get('login_redirect_url'),
     );
 
     $form['saml_login_logout']['logout_redirect_url'] = array(
       '#type' => 'textfield',
-      '#title' => $this->t('Logout Redirect URL'),
+      '#title' => $this->t('Logout redirect URL'),
       '#description' => $this->t('Define the default URL to redirect the user after logout. Enter a internal path starting with a slash, or a absolute URL. Defaults to the front page.'),
       '#default_value' => $config->get('logout_redirect_url'),
     );
@@ -409,6 +429,8 @@ class SamlauthConfigureForm extends ConfigFormBase {
     }
 
     $this->config('samlauth.authentication')
+      ->set('login_menu_item_title', $form_state->getValue('login_menu_item_title'))
+      ->set('logout_menu_item_title', $form_state->getValue('logout_menu_item_title'))
       ->set('drupal_saml_login', $form_state->getValue('drupal_saml_login'))
       ->set('login_redirect_url', $form_state->getValue('login_redirect_url'))
       ->set('logout_redirect_url', $form_state->getValue('logout_redirect_url'))
