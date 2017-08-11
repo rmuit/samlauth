@@ -187,7 +187,7 @@ class SamlService {
 
     $account = $this->externalAuth->load($unique_id, 'samlauth');
     if (!$account) {
-      $this->logger->debug('No matching local users found for unique SAML ID @saml_id.', array('@saml_id' => $unique_id));
+      $this->logger->debug('No matching local users found for unique SAML ID @saml_id.', ['@saml_id' => $unique_id]);
 
       // Try to link an existing user: first through a custom event handler,
       // then by name, then by e-mail.
@@ -203,15 +203,15 @@ class SamlService {
           // cryptic machine name because  synchronizeUserAttributes() cannot
           // assign the proper name while saving.)
           $name = $this->getAttributeByConfig('user_name_attribute');
-          if ($name && $account_search = $this->entityTypeManager->getStorage('user')->loadByProperties(array('name' => $name))) {
+          if ($name && $account_search = $this->entityTypeManager->getStorage('user')->loadByProperties(['name' => $name])) {
             $account = reset($account_search);
-            $this->logger->info('Matching local user @uid found for name @name (as provided in a SAML attribute); associating user and logging in.', array('@name' => $name, '@uid' => $account->id()));
+            $this->logger->info('Matching local user @uid found for name @name (as provided in a SAML attribute); associating user and logging in.', ['@name' => $name, '@uid' => $account->id()]);
           }
           else {
             $mail = $this->getAttributeByConfig('user_mail_attribute');
-            if ($mail && $account_search = $this->entityTypeManager->getStorage('user')->loadByProperties(array('mail' => $mail))) {
+            if ($mail && $account_search = $this->entityTypeManager->getStorage('user')->loadByProperties(['mail' => $mail])) {
               $account = reset($account_search);
-              $this->logger->info('Matching local user @uid found for e-mail @mail (as provided in a SAML attribute); associating user and logging in.', array('@mail' => $mail, '@uid' => $account->id()));
+              $this->logger->info('Matching local user @uid found for e-mail @mail (as provided in a SAML attribute); associating user and logging in.', ['@mail' => $mail, '@uid' => $account->id()]);
             }
           }
         }
@@ -410,37 +410,39 @@ class SamlService {
       $sp_key = $config->get('sp_private_key');
     }
 
-    return array(
-      'sp' => array(
+    return [
+      'sp' => [
         'entityId' => $config->get('sp_entity_id'),
         'assertionConsumerService' => array(
           // See SamlController::redirectResponseFromUrl() for details.
-          'url' => Url::fromRoute('samlauth.saml_controller_acs', array(), array('absolute' => TRUE))->toString(TRUE)->getGeneratedUrl(),
+          'url' => Url::fromRoute('samlauth.saml_controller_acs', [], ['absolute' => TRUE])->toString(TRUE)->getGeneratedUrl(),
         ),
         'singleLogoutService' => array(
-          'url' => Url::fromRoute('samlauth.saml_controller_sls', array(), array('absolute' => TRUE))->toString(TRUE)->getGeneratedUrl(),
+          'url' => Url::fromRoute('samlauth.saml_controller_sls', [], ['absolute' => TRUE])->toString(TRUE)->getGeneratedUrl(),
         ),
         'NameIDFormat' => $config->get('sp_name_id_format'),
         'x509cert' => $sp_cert,
         'privateKey' => $sp_key,
-      ),
-      'idp' => array (
+      ],
+      'idp' => [
         'entityId' => $config->get('idp_entity_id'),
-        'singleSignOnService' => array (
+        'singleSignOnService' => [
           'url' => $config->get('idp_single_sign_on_service'),
-        ),
-        'singleLogoutService' => array (
+        ],
+        'singleLogoutService' => [
           'url' => $config->get('idp_single_log_out_service'),
-        ),
+        ],
         'x509cert' => $config->get('idp_x509_certificate'),
-      ),
-      'security' => array(
+      ],
+      'security' => [
         'authnRequestsSigned' => (bool) $config->get('security_authn_requests_sign'),
         'wantMessagesSigned' => (bool) $config->get('security_messages_sign'),
         'requestedAuthnContext' => (bool) $config->get('security_request_authn_context'),
-      ),
+        'lowercaseUrlencoding' => (bool) $config->get('security_lowercase_url_encoding'),
+        'signatureAlgorithm' => $config->get('security_signature_algorithm'),
+      ],
       'strict' => (bool) $config->get('strict'),
-    );
+    ];
   }
 
 }
