@@ -413,13 +413,13 @@ class SamlService {
     return [
       'sp' => [
         'entityId' => $config->get('sp_entity_id'),
-        'assertionConsumerService' => array(
+        'assertionConsumerService' => [
           // See SamlController::redirectResponseFromUrl() for details.
           'url' => Url::fromRoute('samlauth.saml_controller_acs', [], ['absolute' => TRUE])->toString(TRUE)->getGeneratedUrl(),
-        ),
-        'singleLogoutService' => array(
+        ],
+        'singleLogoutService' => [
           'url' => Url::fromRoute('samlauth.saml_controller_sls', [], ['absolute' => TRUE])->toString(TRUE)->getGeneratedUrl(),
-        ),
+        ],
         'NameIDFormat' => $config->get('sp_name_id_format'),
         'x509cert' => $sp_cert,
         'privateKey' => $sp_key,
