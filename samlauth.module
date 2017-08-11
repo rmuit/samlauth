@@ -44,10 +44,14 @@ function samlauth_check_saml_user($form, FormStateInterface $form_state) {
       return;
     }
 
+    // If the user has logged into the site using samlauth before, block them.
+    // (There currently is no option to disallow _any_ user from logging in
+    // locally.)
     if ($account = user_load_by_name($form_state->getValue('name'))) {
-      $user_data = \Drupal::service('user.data');
-      $saml_id = $user_data->get('samlauth', $account->id(), 'saml_id');
-      if (!is_null($saml_id)) {
+      /** @var \Drupal\externalauth\AuthmapInterface $authmap */
+      $authmap = \Drupal::service('externalauth.authmap');
+      $saml_id = $authmap->get($account->id(), 'samlauth');
+      if ($saml_id !== FALSE) {
         $form_state->setErrorByName('name', t('SAML users must sign in with SSO'));
       }
     }
