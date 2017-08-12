@@ -253,11 +253,35 @@ class SamlauthConfigureForm extends ConfigFormBase {
       '#default_value' => $config->get('idp_change_password_service'),
     ];
 
+    $form['identity_provider']['idp_cert_type'] = [
+      '#type' => 'select',
+      '#title' => $this->t('Single/Multi Cert'),
+      '#required' => TRUE,
+      '#options' => [
+        'single' => $this->t('Single Cert'),
+        'signing' => $this->t('Key Rollover Phase'),
+        'encryption' => $this->t('Unique Signing/Encryption'),
+      ],
+      '#default_value' => $config->get('idp_cert_type') ?  $config->get('idp_cert_type') : 'single',
+    ];
+
     $form['identity_provider']['idp_x509_certificate'] = [
       '#type' => 'textarea',
-      '#title' => $this->t('x509 Certificate'),
+      '#title' => $this->t('Primary x509 Certificate'),
       '#description' => $this->t('Public x509 certificate of the IdP. The external SAML Toolkit library does not allow configuring this as a separate file.'),
       '#default_value' => $config->get('idp_x509_certificate'),
+    ];
+
+    $form['identity_provider']['idp_x509_certificate_multi'] = [
+      '#type' => 'textarea',
+      '#title' => $this->t('Secondary x509 Certificate'),
+      '#description' => $this->t('Secondary public x509 certificate of the IdP. This is a signing key if using "Key Rollover Phase" and an encryption key if using "Unique Signing/Encryption."'),
+      '#default_value' => $config->get('idp_x509_certificate_multi'),
+      '#states' => [
+        'invisible' => [
+          ':input[name="idp_cert_type"]' => ['value' => 'single'],
+        ],
+      ],
     ];
 
     $form['user_info'] = [
@@ -471,7 +495,9 @@ class SamlauthConfigureForm extends ConfigFormBase {
       ->set('idp_single_sign_on_service', $form_state->getValue('idp_single_sign_on_service'))
       ->set('idp_single_log_out_service', $form_state->getValue('idp_single_log_out_service'))
       ->set('idp_change_password_service', $form_state->getValue('idp_change_password_service'))
+      ->set('idp_cert_type', $form_state->getValue('idp_cert_type'))
       ->set('idp_x509_certificate', $form_state->getValue('idp_x509_certificate'))
+      ->set('idp_x509_certificate_multi', $form_state->getValue('idp_x509_certificate_multi'))
       ->set('unique_id_attribute', $form_state->getValue('unique_id_attribute'))
       ->set('map_users', $form_state->getValue('map_users'))
       ->set('create_users', $form_state->getValue('create_users'))

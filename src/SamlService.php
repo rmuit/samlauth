@@ -410,7 +410,7 @@ class SamlService {
       $sp_key = $config->get('sp_private_key');
     }
 
-    return [
+    $library_config = [
       'sp' => [
         'entityId' => $config->get('sp_entity_id'),
         'assertionConsumerService' => [
@@ -443,6 +443,31 @@ class SamlService {
       ],
       'strict' => (bool) $config->get('strict'),
     ];
+
+    // Check for the presence of a multi cert situation.
+    $multi = $config->get('idp_cert_type');
+    switch ($multi) {
+      case "signing":
+        $library_config['idp']['x509certMulti'] = array (
+          'signing' => array (
+            $config->get('idp_x509_certificate'),
+            $config->get('idp_x509_certificate_multi'),
+          )
+        );
+        break;
+      case "encryption":
+        $library_config['idp']['x509certMulti'] = array (
+          'signing' => array (
+            $config->get('idp_x509_certificate'),
+          ),
+          'encryption' => array (
+            $config->get('idp_x509_certificate_multi'),
+          ),
+        );
+        break;
+    }
+
+    return $library_config;
   }
 
 }
