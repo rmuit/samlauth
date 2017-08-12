@@ -266,7 +266,7 @@ class SamlService {
     foreach ([
                'session_index' => $this->samlAuth->getSessionIndex(),
                'session_expiration' => $this->samlAuth->getSessionExpiration(),
-               'name_id' => $this->samlAuth->getSessionExpirationgetNameId(),
+               'name_id' => $this->samlAuth->getNameId(),
                'name_id_format' => $this->samlAuth->getNameIdFormat(),
              ] as $key => $value) {
       if (isset($value)) {
