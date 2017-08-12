@@ -77,6 +77,25 @@ class SamlauthUserSyncEvent extends Event {
   }
 
   /**
+   * Sets the SAML attributes.
+   *
+   * Event handlers typically will use only the getter, to inspect attributes
+   * that are present in the SAML message. This setter provides a way to
+   * override those values in edge cases but is not meant to be used often. It
+   * provides no nice DX; the caller needs to make sure that all attributes are
+   * set at once (probably by first using getAttributes() and changing the
+   * appropriate values). The caller also needs to make sure that values are
+   * structured as other event subscribers expect them (which is likely to be
+   * single-value arrays).
+   *
+   * @param array $attributes
+   *   An array containing SAML attributes.
+   */
+  public function setAttributes(array $attributes) {
+    $this->attributes = $attributes;
+  }
+
+  /**
    * Marks the user account as changed.
    *
    * This is the way for event subscribers to make sure user account gets saved.
