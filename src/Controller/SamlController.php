@@ -291,7 +291,7 @@ class SamlController extends ControllerBase {
    *
    * @param string|\Drupal\Core\Url $url
    *   A URL to redirect to, either as a string or a Drupal URL object. Strings
-   *   may only be used by callbacks that are configured in routing.yml os not
+   *   may only be used by callbacks that are configured in routing.yml as not
    *   being cacheable. (Which, in our case, is most callbacks.)
    *
    * @return \Drupal\Core\Routing\TrustedRedirectResponse
